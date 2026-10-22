@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminPasswordController;
+use App\Http\Controllers\ClassRosterController;
 use App\Http\Controllers\AnnonceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmploiDuTempsController;
@@ -68,6 +69,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/resultats/calculer/{etudiant}/{annee}', [ResultatAnnuelController::class, 'calculate'])->name('resultats.calculate');
         Route::put('/resultats/{resultat}/decision', [ResultatAnnuelController::class, 'decide'])->name('resultats.decide');
         Route::post('/resultats/{resultat}/publier', [ResultatAnnuelController::class, 'publish'])->name('resultats.publish');
+        Route::get('/listes-classe', [ClassRosterController::class, 'index'])->name('class-roster.index');
+        Route::get('/listes-classe/pdf', [ClassRosterController::class, 'pdf'])->name('class-roster.pdf');
         Route::get('/securite/mots-de-passe', [AdminPasswordController::class, 'index'])->name('passwords.index');
         Route::post('/securite/mots-de-passe/{user}', [AdminPasswordController::class, 'reset'])->name('passwords.reset');
         Route::put('/securite/mot-de-passe', [AdminPasswordController::class, 'update'])->name('passwords.update');

@@ -40,7 +40,7 @@ Les comptes et mots de passe enseignants ci-dessus sont exclusivement destinés 
 
 ## Rotation du mot de passe administrateur
 
-Le mot de passe historique `AdminUIST2its!` est compromis et ne doit plus être utilisé. Après déploiement du code, appliquez la migration puis réinitialisez uniquement le compte concerné depuis un terminal autorisé :
+Le mot de passe administrateur historique est compromis et ne doit plus être utilisé. Après déploiement du code, appliquez la migration puis réinitialisez uniquement le compte concerné depuis un terminal autorisé :
 
 ```bash
 php artisan migrate --force

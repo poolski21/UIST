@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AnneeAcademique;
+use App\Models\EmploiDuTemps;
 use App\Models\Filiere;
 use App\Models\Inscription;
 use App\Models\JournalModification;
@@ -24,15 +25,19 @@ class UistPortalTest extends TestCase
         $this->withoutVite();
     }
 
-    public function test_student_can_sign_in_with_permanent_matricule_only(): void
+    public function test_student_sign_in_requires_matricule_and_date_of_birth(): void
     {
         $student = User::create([
             'name' => 'Étudiante Démo',
             'role' => 'student',
             'matricule' => 'UIST-TEST-0001',
+            'date_naissance' => '2003-02-14',
         ]);
 
-        $response = $this->post('/connexion/etudiant', ['matricule' => $student->matricule]);
+        $response = $this->post('/connexion/etudiant', [
+            'matricule' => $student->matricule,
+            'date_naissance' => '2003-02-14',
+        ]);
 
         $response->assertRedirect(route('espace'));
         $this->assertAuthenticatedAs($student);
@@ -66,11 +71,15 @@ class UistPortalTest extends TestCase
             'name' => 'Étudiant Espace',
             'role' => 'student',
             'matricule' => 'UIST-SPACE-0001',
+            'date_naissance' => '2002-03-15',
         ]);
 
         $this->get('/espace')->assertRedirect(route('login'));
 
-        $this->post('/connexion/etudiant', ['matricule' => $student->matricule])
+        $this->post('/connexion/etudiant', [
+            'matricule' => $student->matricule,
+            'date_naissance' => '2002-03-15',
+        ])
             ->assertRedirect('/espace');
 
         $this->get('/espace')->assertRedirect('/etudiant');
@@ -116,14 +125,116 @@ class UistPortalTest extends TestCase
     public function test_invalid_student_logins_are_rate_limited_and_logged(): void
     {
         for ($attempt = 0; $attempt < 5; $attempt++) {
-            $this->post('/connexion/etudiant', ['matricule' => 'UNKNOWN-001'])
+            $this->post('/connexion/etudiant', [
+                'matricule' => 'UNKNOWN-001',
+                'date_naissance' => '2000-01-01',
+            ])
                 ->assertSessionHasErrors('matricule');
         }
 
-        $this->post('/connexion/etudiant', ['matricule' => 'UNKNOWN-001'])
+        $this->post('/connexion/etudiant', [
+            'matricule' => 'UNKNOWN-001',
+            'date_naissance' => '2000-01-01',
+        ])
             ->assertSessionHasErrors('matricule');
 
         $this->assertDatabaseCount('connexions_log', 6);
+    }
+
+    public function test_student_login_uses_the_same_error_for_wrong_matricule_and_birth_date(): void
+    {
+        $student = User::create([
+            'name' => 'Étudiant Sécurisé',
+            'role' => 'student',
+            'matricule' => 'UIST-SECURE-0001',
+            'date_naissance' => '2001-04-12',
+        ]);
+
+        $wrongDate = $this->from('/connexion')->post('/connexion/etudiant', [
+            'matricule' => $student->matricule,
+            'date_naissance' => '2001-04-13',
+        ]);
+        $wrongDate->assertSessionHasErrors(['matricule', 'date_naissance']);
+        $dateErrors = session('errors')->get('matricule');
+
+        $wrongMatricule = $this->from('/connexion')->post('/connexion/etudiant', [
+            'matricule' => 'UIST-UNKNOWN',
+            'date_naissance' => '2001-04-12',
+        ]);
+        $wrongMatricule->assertSessionHasErrors(['matricule', 'date_naissance']);
+        $matriculeErrors = session('errors')->get('matricule');
+
+        $this->assertSame($dateErrors, $matriculeErrors);
+        $this->assertGuest();
+    }
+
+    public function test_student_dashboard_shows_only_schedule_for_exact_filiere_and_level(): void
+    {
+        $filiere = Filiere::create(['nom' => 'Informatique', 'code' => 'INFO']);
+        $otherFiliere = Filiere::create(['nom' => 'Gestion', 'code' => 'GEST']);
+        $niveau = Niveau::create(['filiere_id' => $filiere->id, 'nom' => 'Licence 1', 'code' => 'L1', 'credits_requis' => 60]);
+        $otherNiveau = Niveau::create(['filiere_id' => $filiere->id, 'nom' => 'Licence 2', 'code' => 'L2', 'credits_requis' => 60]);
+        $student = User::create([
+            'name' => 'Étudiant Informatique',
+            'role' => 'student',
+            'matricule' => 'ETU-SCHEDULE-1',
+            'filiere_id' => $filiere->id,
+            'niveau_id' => $niveau->id,
+        ]);
+        $matching = EmploiDuTemps::create([
+            'titre' => 'Cours correspondant',
+            'filiere_id' => $filiere->id,
+            'niveau_id' => $niveau->id,
+            'date_cours' => now()->toDateString(),
+            'heure_debut' => '08:00',
+            'heure_fin' => '10:00',
+            'statut' => 'publie',
+            'publie_le' => now(),
+        ]);
+        EmploiDuTemps::create([
+            'titre' => 'Autre niveau',
+            'filiere_id' => $filiere->id,
+            'niveau_id' => $otherNiveau->id,
+            'date_cours' => now()->toDateString(),
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+            'statut' => 'publie',
+            'publie_le' => now(),
+        ]);
+        EmploiDuTemps::create([
+            'titre' => 'Autre filière',
+            'filiere_id' => $otherFiliere->id,
+            'niveau_id' => $niveau->id,
+            'date_cours' => now()->toDateString(),
+            'heure_debut' => '12:00',
+            'heure_fin' => '14:00',
+            'statut' => 'publie',
+            'publie_le' => now(),
+        ]);
+        EmploiDuTemps::create([
+            'titre' => 'Cible générale',
+            'date_cours' => now()->toDateString(),
+            'heure_debut' => '14:00',
+            'heure_fin' => '16:00',
+            'statut' => 'publie',
+            'publie_le' => now(),
+        ]);
+
+        $this->actingAs($student)->get('/etudiant')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('emploiDuTemps', 1)
+                ->where('emploiDuTemps.0.id', $matching->id)
+                ->where('emploiDuTemps.0.titre', 'Cours correspondant'));
+
+        $unclassifiedStudent = User::create([
+            'name' => 'Étudiant sans classement',
+            'role' => 'student',
+            'matricule' => 'ETU-SCHEDULE-2',
+        ]);
+        $this->actingAs($unclassifiedStudent)->get('/etudiant')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('emploiDuTemps', 0));
     }
 
     public function test_role_permissions_and_student_notes_are_scoped(): void

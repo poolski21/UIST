@@ -33,12 +33,10 @@ class StudentDashboardController extends Controller
             ->with(['filiere', 'niveau'])
             ->where('statut', 'publie')
             ->whereBetween('date_cours', [$weekStart->toDateString(), $weekEnd->toDateString()])
-            ->where(fn ($query) => $query
-                ->whereNull('filiere_id')
-                ->orWhere('filiere_id', $student->filiere_id))
-            ->where(fn ($query) => $query
-                ->whereNull('niveau_id')
-                ->orWhere('niveau_id', $student->niveau_id))
+            ->whereNotNull('filiere_id')
+            ->whereNotNull('niveau_id')
+            ->where('filiere_id', $student->filiere_id)
+            ->where('niveau_id', $student->niveau_id)
             ->orderBy('date_cours')
             ->orderBy('heure_debut')
             ->get();

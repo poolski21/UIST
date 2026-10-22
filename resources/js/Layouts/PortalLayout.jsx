@@ -9,7 +9,7 @@ export default function PortalLayout({ title, children }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const user = auth?.user;
     const links = user?.role === 'admin'
-        ? [['/admin', 'Tableau de bord'], ['/admin/gestion', 'Gestion académique'], ['/admin/annonces', 'Annonces'], ['/admin/emplois-du-temps', 'Emplois du temps'], ['/admin/notes', 'Notes'], ['/admin/resultats', 'Décisions']]
+        ? [['/admin', 'Tableau de bord'], ['/admin/gestion', 'Gestion académique'], ['/admin/annonces', 'Annonces'], ['/admin/emplois-du-temps', 'Emplois du temps'], ['/admin/notes', 'Notes'], ['/admin/resultats', 'Décisions'], ['/admin/securite/mots-de-passe', 'Mots de passe']]
         : user?.role === 'teacher'
             ? [['/enseignant/notes', 'Saisie des notes']]
             : [['/etudiant', 'Mon espace']];

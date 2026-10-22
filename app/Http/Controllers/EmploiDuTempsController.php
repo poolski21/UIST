@@ -61,9 +61,13 @@ class EmploiDuTempsController extends Controller
 
     private function notifier(EmploiDuTemps $emploi): void
     {
+        if (! $emploi->filiere_id || ! $emploi->niveau_id) {
+            return;
+        }
+
         $students = User::query()->where('role', 'student')
-            ->when($emploi->filiere_id, fn ($query) => $query->where('filiere_id', $emploi->filiere_id))
-            ->when($emploi->niveau_id, fn ($query) => $query->where('niveau_id', $emploi->niveau_id))
+            ->where('filiere_id', $emploi->filiere_id)
+            ->where('niveau_id', $emploi->niveau_id)
             ->get();
         Notification::send(
             $students,

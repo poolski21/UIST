@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'student_second_factor' => env('UIST_STUDENT_SECOND_FACTOR', false),
+    'admin_initial_password' => env('ADMIN_INITIAL_PASSWORD'),
     'admission_average' => (float) env('UIST_ADMISSION_AVERAGE', 10),
     'student_login_attempts' => (int) env('UIST_STUDENT_LOGIN_ATTEMPTS', 5),
     'student_login_decay_minutes' => (int) env('UIST_STUDENT_LOGIN_DECAY_MINUTES', 1),

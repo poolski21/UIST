@@ -19,7 +19,7 @@ class AuthController extends Controller
     public function create(): Response
     {
         return Inertia::render('Auth/Login', [
-            'studentSecondFactor' => (bool) config('uist2its.student_second_factor'),
+            'studentSecondFactor' => true,
         ]);
     }
 
@@ -36,15 +36,15 @@ class AuthController extends Controller
         }
 
         $etudiant = User::query()->where('matricule', $matricule)->where('role', 'student')->first();
-        $secondFactorValide = ! config('uist2its.student_second_factor')
-            || ($etudiant?->date_naissance?->format('Y-m-d') === $request->input('date_naissance'));
+        $secondFactorValide = $etudiant?->date_naissance?->format('Y-m-d') === $request->input('date_naissance');
 
         if (! $etudiant || ! $secondFactorValide) {
             RateLimiter::hit($key, config('uist2its.student_login_decay_minutes') * 60);
             $this->journaliser($request, $etudiant, $matricule, false, 'matricule');
 
             throw ValidationException::withMessages([
-                'matricule' => 'Matricule ou information complémentaire invalide.',
+                'matricule' => 'Matricule ou date de naissance invalide.',
+                'date_naissance' => 'Matricule ou date de naissance invalide.',
             ]);
         }
 
@@ -53,7 +53,9 @@ class AuthController extends Controller
         $request->session()->regenerate();
         $this->journaliser($request, $etudiant, $matricule, true, 'matricule');
 
-        return redirect()->intended(route('espace'));
+        return redirect()->intended($etudiant->password_change_required
+            ? route('admin.passwords.index')
+            : route('espace'));
     }
 
     public function user(UserLoginRequest $request): RedirectResponse
@@ -73,7 +75,9 @@ class AuthController extends Controller
         Auth::login($candidate);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('espace'));
+        return redirect()->intended($candidate->password_change_required
+            ? route('admin.passwords.index')
+            : route('espace'));
     }
 
     public function destroy(): RedirectResponse

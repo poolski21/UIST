@@ -2,9 +2,9 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminPasswordController;
-use App\Http\Controllers\ClassRosterController;
 use App\Http\Controllers\AnnonceController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ClassRosterController;
 use App\Http\Controllers\EmploiDuTempsController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LocaleController;
@@ -61,6 +61,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/annonces/{annonce}/publier', [AnnonceController::class, 'publish'])->name('annonces.publish');
         Route::get('/emplois-du-temps', [EmploiDuTempsController::class, 'index'])->name('emplois');
         Route::post('/emplois-du-temps', [EmploiDuTempsController::class, 'store'])->name('emplois.store');
+        Route::put('/emplois-du-temps/{emploiDuTemps}', [EmploiDuTempsController::class, 'update'])->name('emplois.update');
+        Route::delete('/emplois-du-temps/{emploiDuTemps}', [EmploiDuTempsController::class, 'destroy'])->name('emplois.destroy');
+        Route::post('/emplois-du-temps/publier-semaine', [EmploiDuTempsController::class, 'publishWeek'])->name('emplois.publish-week');
         Route::post('/emplois-du-temps/{emploiDuTemps}/publier', [EmploiDuTempsController::class, 'publish'])->name('emplois.publish');
         Route::get('/notes', [NoteController::class, 'index'])->name('notes');
         Route::post('/notes', [NoteController::class, 'store'])->name('notes.store');

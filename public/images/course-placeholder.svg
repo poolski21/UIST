@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" role="img" aria-label="Illustration pédagogique">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dff2ff"/>
+      <stop offset="1" stop-color="#c7d2fe"/>
+    </linearGradient>
+    <linearGradient id="book" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a93e8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#background)"/>
+  <circle cx="650" cy="90" r="118" fill="#fff" opacity=".38"/>
+  <circle cx="130" cy="370" r="152" fill="#fff" opacity=".32"/>
+  <path d="M253 145c52-26 98-25 147 4 49-29 95-30 147-4v172c-52-26-98-25-147 4-49-29-95-30-147-4z" fill="url(#book)"/>
+  <path d="M400 149v172" stroke="#fff" stroke-width="8" opacity=".8"/>
+  <path d="M283 183c35-14 67-13 96 1m-96 35c35-14 67-13 96 1m-96 35c35-14 67-13 96 1m128-72c35-14 67-13 96 1m-96 35c35-14 67-13 96 1m-96 35c35-14 67-13 96 1" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="7" opacity=".82"/>
+  <path d="m615 286 23 23 47-55" fill="none" stroke="#f59e0b" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+</svg>

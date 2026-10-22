@@ -59,6 +59,8 @@ const english = {
     'Décisions': 'Results',
     'Saisie des notes': 'Grade entry',
     'Mon espace': 'My portal',
+    'Mots de passe': 'Passwords',
+    'Listes de classe': 'Class rosters',
     'Déconnexion': 'Sign out',
     'Bienvenue sur votre portail': 'Welcome to your portal',
     'Vos informations académiques, réunies au même endroit.': 'Your academic information, all in one place.',

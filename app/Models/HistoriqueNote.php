@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use LogicException;
 
 class HistoriqueNote extends Model
 {
@@ -19,6 +20,17 @@ class HistoriqueNote extends Model
             'nouvelle_valeur' => 'array',
             'modifie_le' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(static function (): never {
+            throw new LogicException('L’historique des notes est immuable.');
+        });
+
+        static::deleting(static function (): never {
+            throw new LogicException('L’historique des notes est immuable.');
+        });
     }
 
     public function note()

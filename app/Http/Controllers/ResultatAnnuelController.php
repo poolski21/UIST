@@ -78,6 +78,17 @@ class ResultatAnnuelController extends Controller
 
     public function pdf(ResultatAnnuel $resultat)
     {
+        $user = auth()->user();
+
+        if ($user->role === 'student'
+            && (int) $resultat->etudiant_id === (int) $user->getKey()
+            && $resultat->a_recalculer) {
+            return response(
+                'Votre relevé est en cours de mise à jour. Il sera de nouveau disponible après validation par l’administration.',
+                409,
+            );
+        }
+
         $this->authorize('view', $resultat);
         $resultat->load(['etudiant.filiere', 'etudiant.niveau', 'anneeAcademique']);
         $notes = $resultat->etudiant->notes()

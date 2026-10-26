@@ -47,6 +47,35 @@ class AuthorizationIdorTest extends TestCase
             ->assertDownload();
     }
 
+    public function test_student_cannot_download_their_result_while_it_is_marked_for_recalculation(): void
+    {
+        $student = $this->createStudent();
+        $resultat = $this->createResult($student, now());
+        $resultat->update(['a_recalculer' => true]);
+
+        $this->actingAs($student)
+            ->get(route('releve.pdf', $resultat))
+            ->assertStatus(409)
+            ->assertSeeText('Votre relevé est en cours de mise à jour. Il sera de nouveau disponible après validation par l’administration.');
+    }
+
+    public function test_student_can_download_their_result_again_after_recalculation(): void
+    {
+        $student = $this->createStudent();
+        $resultat = $this->createResult($student, now());
+        $resultat->update(['a_recalculer' => true]);
+
+        $this->actingAs($student)
+            ->get(route('releve.pdf', $resultat))
+            ->assertStatus(409);
+
+        $resultat->update(['a_recalculer' => false]);
+
+        $this->get(route('releve.pdf', $resultat))
+            ->assertOk()
+            ->assertDownload();
+    }
+
     public function test_student_cannot_download_another_students_annual_result(): void
     {
         $owner = $this->createStudent('owner');
@@ -72,6 +101,7 @@ class AuthorizationIdorTest extends TestCase
     {
         $student = $this->createStudent();
         $resultat = $this->createResult($student);
+        $resultat->update(['a_recalculer' => true]);
         $admin = User::create([
             'name' => 'Administrateur',
             'email' => 'admin@test.ci',

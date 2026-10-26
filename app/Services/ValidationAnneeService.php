@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AnneeAcademique;
 use App\Models\Inscription;
+use App\Models\JournalModification;
 use App\Models\Matiere;
 use App\Models\Note;
 use App\Models\ResultatAnnuel;
@@ -72,29 +73,53 @@ class ValidationAnneeService
             && $credits >= $inscription->niveau->credits_requis
             ? 'admis'
             : 'ajourne';
+        $actorId = auth()->id();
 
-        return DB::transaction(function () use ($etudiant, $annee, $moyenne, $credits, $decision): ResultatAnnuel {
+        return DB::transaction(function () use ($etudiant, $annee, $moyenne, $credits, $decision, $actorId): ResultatAnnuel {
             $resultat = ResultatAnnuel::firstOrNew([
                 'etudiant_id' => $etudiant->id,
                 'annee_academique_id' => $annee->id,
             ]);
             $decisionFinaleModifiee = $resultat->exists && $resultat->modifiee_par !== null;
             $decisionPubliee = $resultat->exists && $resultat->publie_le !== null;
+            $recalculSuiteCorrectionNote = $resultat->a_recalculer;
+            $ancienneDecisionAuto = $resultat->decision_auto;
+            $ancienneDecisionFinale = $resultat->decision_finale;
 
             $resultat->moyenne_generale = round($moyenne, 2);
             $resultat->credits_obtenus = $credits;
+            $resultat->decision_auto = $decision;
             if (! $decisionPubliee) {
-                $resultat->decision_auto = $decision;
                 if (! $decisionFinaleModifiee) {
                     $resultat->decision_finale = $decision;
                     $resultat->modifiee_par = null;
                     $resultat->motif = null;
                 }
-            } elseif ($resultat->decision_finale !== null) {
-                $resultat->decision_auto = $decision;
             }
             $resultat->a_recalculer = false;
             $resultat->save();
+
+            $motif = $recalculSuiteCorrectionNote
+                ? 'Recalcul automatique suite à correction d’une note publiée'
+                : 'Recalcul automatique';
+
+            foreach ([
+                'decision_auto' => [$ancienneDecisionAuto, $resultat->decision_auto],
+                'decision_finale' => [$ancienneDecisionFinale, $resultat->decision_finale],
+            ] as $champ => [$ancienneValeur, $nouvelleValeur]) {
+                if ($ancienneValeur === $nouvelleValeur) {
+                    continue;
+                }
+
+                JournalModification::create([
+                    'modifie_par' => $actorId,
+                    'element_type' => ResultatAnnuel::class,
+                    'element_id' => $resultat->id,
+                    'anciennes_valeurs' => [$champ => $ancienneValeur],
+                    'nouvelles_valeurs' => [$champ => $nouvelleValeur],
+                    'motif' => $motif,
+                ]);
+            }
 
             return $resultat;
         });

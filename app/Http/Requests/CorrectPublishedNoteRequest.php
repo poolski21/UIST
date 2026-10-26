@@ -26,7 +26,7 @@ class CorrectPublishedNoteRequest extends FormRequest
             'notes_td' => ['required', 'array', 'min:1', 'max:20'],
             'notes_td.*' => ['required', 'numeric', 'between:0,20'],
             'note_examen' => ['required', 'numeric', 'between:0,20'],
-            'motif' => ['required', 'string', 'max:5000'],
+            'motif' => ['required', 'string', 'min:10', 'max:5000'],
         ];
     }
 }

@@ -6,10 +6,10 @@ use App\Models\AnneeAcademique;
 use App\Models\EmploiDuTemps;
 use App\Models\Filiere;
 use App\Models\Inscription;
-use App\Models\JournalModification;
 use App\Models\Matiere;
 use App\Models\Niveau;
 use App\Models\Note;
+use App\Models\ResultatAnnuel;
 use App\Models\User;
 use App\Services\ValidationAnneeService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -355,7 +355,12 @@ class UistPortalTest extends TestCase
             'decision_finale' => 'ajourne',
             'motif' => 'Décision du jury après délibération.',
         ]);
-        $this->assertSame(1, JournalModification::count());
+        $this->assertDatabaseHas('journal_modifications', [
+            'modifie_par' => $admin->id,
+            'element_type' => ResultatAnnuel::class,
+            'element_id' => $result->id,
+            'motif' => 'Décision du jury après délibération.',
+        ]);
 
         $this->actingAs($student)->get('/resultats/'.$result->id.'/releve.pdf')->assertForbidden();
         $this->actingAs($admin)->post('/admin/resultats/'.$result->id.'/publier')->assertRedirect();

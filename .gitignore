@@ -3,6 +3,10 @@
 .env
 .env.backup
 .env.production
+.env.*.local
+*.dump
+*.sql
+UIST2its_Guide_utilisation.pdf
 .phpactor.json
 .phpunit.result.cache
 /.codex

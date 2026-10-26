@@ -15,9 +15,12 @@ use App\Notifications\PublicationNotification;
 use App\Services\CalculNoteMatiere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class NoteController extends Controller
 {
@@ -145,15 +148,35 @@ class NoteController extends Controller
     public function publish(Matiere $matiere, AnneeAcademique $annee): RedirectResponse
     {
         $this->authorize('publish', Note::class);
-        $notes = Note::query()
-            ->where('matiere_id', $matiere->id)
-            ->where('annee_academique_id', $annee->id)
-            ->where('statut', 'brouillon')
-            ->get();
+        $notes = DB::transaction(function () use ($matiere, $annee) {
+            $notes = Note::query()
+                ->with('etudiant')
+                ->where('matiere_id', $matiere->id)
+                ->where('annee_academique_id', $annee->id)
+                ->where('statut', 'brouillon')
+                ->lockForUpdate()
+                ->get();
 
-        foreach ($notes as $note) {
-            $note->update(['statut' => 'publie', 'publie_le' => now()]);
-            $note->etudiant->notify(new PublicationNotification('Nouvelle note publiée', 'Une note de '.$matiere->nom.' est disponible dans votre espace étudiant.', '/espace'));
+            foreach ($notes as $note) {
+                $note->update(['statut' => 'publie', 'publie_le' => now()]);
+            }
+
+            return $notes;
+        });
+
+        $destinataires = $notes->pluck('etudiant')->unique('id')->values();
+        try {
+            Notification::send(
+                $destinataires,
+                new PublicationNotification('Nouvelle note publiée', 'Une note de '.$matiere->nom.' est disponible dans votre espace étudiant.', '/espace'),
+            );
+        } catch (Throwable $exception) {
+            Log::error('Échec de notification après publication des notes.', [
+                'matiere_id' => $matiere->id,
+                'annee_academique_id' => $annee->id,
+                'destinataires' => $destinataires->count(),
+                'exception' => $exception,
+            ]);
         }
 
         return back()->with('success', $notes->count().' note(s) publiée(s).');

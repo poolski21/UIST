@@ -12,8 +12,11 @@ use App\Services\ValidationAnneeService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class ResultatAnnuelController extends Controller
 {
@@ -67,10 +70,32 @@ class ResultatAnnuelController extends Controller
     public function publish(ResultatAnnuel $resultat): RedirectResponse
     {
         abort_unless(auth()->user()->role === 'admin', 403);
-        abort_if($resultat->a_recalculer, 409, 'Le résultat doit être recalculé avant sa publication.');
-        if (! $resultat->publie_le) {
+        $etudiant = DB::transaction(function () use ($resultat): ?User {
+            $resultat = ResultatAnnuel::query()->lockForUpdate()->findOrFail($resultat->id);
+            abort_if($resultat->a_recalculer, 409, 'Le résultat doit être recalculé avant sa publication.');
+
+            if ($resultat->publie_le) {
+                return null;
+            }
+
             $resultat->update(['publie_le' => now()]);
-            $resultat->etudiant->notify(new PublicationNotification('Décision annuelle publiée', 'Votre décision de fin d’année est disponible avec votre relevé de notes.', '/espace'));
+
+            return $resultat->etudiant;
+        });
+
+        if ($etudiant) {
+            try {
+                Notification::send(
+                    collect([$etudiant]),
+                    new PublicationNotification('Décision annuelle publiée', 'Votre décision de fin d’année est disponible avec votre relevé de notes.', '/espace'),
+                );
+            } catch (Throwable $exception) {
+                Log::error('Échec de notification après publication du résultat annuel.', [
+                    'resultat_id' => $resultat->id,
+                    'etudiant_id' => $etudiant->id,
+                    'exception' => $exception,
+                ]);
+            }
         }
 
         return back()->with('success', 'Décision publiée à l’étudiant.');

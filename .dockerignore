@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.production.example
+vendor
+node_modules
+tests
+storage/logs
+storage/logs/*
+public/build
+database/*.sqlite*
+*.dump
+*.sql
+UIST2its_Guide_utilisation.pdf

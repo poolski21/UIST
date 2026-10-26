@@ -13,6 +13,7 @@ use App\Policies\ClassRosterPolicy;
 use App\Policies\NotePolicy;
 use App\Policies\ResultatAnnuelPolicy;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -30,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (app()->isProduction()) {
+            URL::forceScheme('https');
+        }
+
         Gate::policy(Annonce::class, AnnoncePolicy::class);
         Gate::policy(Note::class, NotePolicy::class);
         Gate::policy(ResultatAnnuel::class, ResultatAnnuelPolicy::class);

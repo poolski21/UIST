@@ -15,11 +15,21 @@ use App\Models\Note;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
+use RuntimeException;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $admin = $this->ensureInitialAdmin();
+
+        if (app()->isProduction()) {
+            $this->command?->warn('Production détectée : les données et comptes de démonstration ne seront pas créés.');
+
+            return;
+        }
+
         $filiereDefinitions = [
             'SCI' => 'Science Informatique',
             'DROIT' => 'Droit',
@@ -63,35 +73,6 @@ class DatabaseSeeder extends Seeder
         );
         AnneeAcademique::whereKeyNot($annee->id)->update(['active' => false]);
 
-        $admin = User::query()->where('email', 'admin@uist.ci')->first();
-        if ($admin && $admin->role !== 'admin') {
-            throw new \RuntimeException('admin@uist.ci existe, mais ce compte n’est pas administrateur.');
-        }
-        if (! $admin) {
-            $password = config('uist2its.admin_initial_password');
-            $generatedPassword = ! is_string($password) || trim($password) === '';
-
-            if ($generatedPassword) {
-                $password = bin2hex(random_bytes(24));
-            } elseif (mb_strlen($password) < 16) {
-                throw new \InvalidArgumentException('ADMIN_INITIAL_PASSWORD doit contenir au moins 16 caractères.');
-            }
-
-            $admin = User::create([
-                'email' => 'admin@uist.ci',
-                'name' => 'Administration UIST',
-                'role' => 'admin',
-                'password' => $password,
-            ]);
-            $admin->forceFill(['password_change_required' => true])->save();
-
-            if ($generatedPassword) {
-                $this->command?->warn('Mot de passe initial admin (à conserver de façon sûre, affiché une seule fois) :');
-                $this->command?->line($password);
-            } else {
-                $this->command?->info('Compte admin initial créé ; le changement du mot de passe sera requis à la première connexion.');
-            }
-        }
         $enseignant1 = User::updateOrCreate(
             ['email' => 'enseignant1@uist.ci'],
             ['name' => 'Dr. Awa Kouassi', 'role' => 'teacher', 'password' => 'EnseignantUIST!1'],
@@ -166,6 +147,7 @@ class DatabaseSeeder extends Seeder
                     ['description' => 'Ressource pédagogique proposée par l’Université Internationale des Sciences et Technologie.', 'actif' => true],
                 );
             }
+
         }
 
         Annonce::updateOrCreate(
@@ -192,5 +174,42 @@ class DatabaseSeeder extends Seeder
                 'publie_le' => now(),
             ],
         );
+    }
+
+    private function ensureInitialAdmin(): User
+    {
+        $admin = User::query()->where('email', 'admin@uist.ci')->first();
+        if ($admin && $admin->role !== 'admin') {
+            throw new RuntimeException('admin@uist.ci existe, mais ce compte n’est pas administrateur.');
+        }
+        if ($admin) {
+            return $admin;
+        }
+
+        $password = config('uist2its.admin_initial_password');
+        $generatedPassword = ! is_string($password) || trim($password) === '';
+
+        if ($generatedPassword) {
+            $password = bin2hex(random_bytes(24));
+        } elseif (mb_strlen($password) < 16) {
+            throw new InvalidArgumentException('ADMIN_INITIAL_PASSWORD doit contenir au moins 16 caractères.');
+        }
+
+        $admin = User::create([
+            'email' => 'admin@uist.ci',
+            'name' => 'Administration UIST',
+            'role' => 'admin',
+            'password' => $password,
+        ]);
+        $admin->forceFill(['password_change_required' => true])->save();
+
+        if ($generatedPassword) {
+            $this->command?->warn('Mot de passe initial admin (à conserver de façon sûre, affiché une seule fois) :');
+            $this->command?->line($password);
+        } else {
+            $this->command?->info('Compte admin initial créé ; le changement du mot de passe sera requis à la première connexion.');
+        }
+
+        return $admin;
     }
 }

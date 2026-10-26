@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CorrectPublishedNoteRequest;
 use App\Http\Requests\StoreNoteRequest;
 use App\Models\AnneeAcademique;
+use App\Models\HistoriqueNote;
 use App\Models\Inscription;
 use App\Models\Matiere;
 use App\Models\Note;
+use App\Models\ResultatAnnuel;
 use App\Models\User;
-use App\Services\CalculNoteMatiere;
 use App\Notifications\PublicationNotification;
+use App\Services\CalculNoteMatiere;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -59,23 +63,83 @@ class NoteController extends Controller
             ->where('annee_academique_id', $data['annee_academique_id'])
             ->where('niveau_id', $matiere->niveau_id)
             ->exists();
-        if ($etudiant->filiere_id !== $matiere->filiere_id || ! $inscrit) {
+        if ((int) $etudiant->filiere_id !== (int) $matiere->filiere_id || ! $inscrit) {
             throw ValidationException::withMessages(['etudiant_id' => 'Cet étudiant n’est pas inscrit dans la filière et le niveau de cette matière.']);
         }
 
-        Note::updateOrCreate(
-            ['etudiant_id' => $etudiant->id, 'matiere_id' => $matiere->id, 'annee_academique_id' => $data['annee_academique_id']],
-            [
+        DB::transaction(function () use ($data, $etudiant, $matiere, $request): void {
+            $criteria = [
+                'etudiant_id' => $etudiant->id,
+                'matiere_id' => $matiere->id,
+                'annee_academique_id' => $data['annee_academique_id'],
+            ];
+            $note = Note::query()->where($criteria)->lockForUpdate()->first();
+
+            abort_if(
+                $note?->statut === 'publie',
+                403,
+                'Une note publiée ne peut pas être modifiée par cette saisie. Une correction administrative avec motif est requise.',
+            );
+
+            $attributes = [
                 'note' => app(CalculNoteMatiere::class)->calculer($data['notes_td'], (float) $data['note_examen']),
                 'notes_td' => array_map('floatval', $data['notes_td']),
                 'note_examen' => $data['note_examen'],
                 'statut' => 'brouillon',
                 'saisie_par' => $request->user()->id,
                 'publie_le' => null,
-            ],
-        );
+            ];
+
+            if ($note) {
+                $note->update($attributes);
+            } else {
+                Note::create($criteria + $attributes);
+            }
+        });
 
         return back()->with('success', 'Note enregistrée en brouillon. Sa publication la rendra visible à l’étudiant.');
+    }
+
+    public function correctPublished(CorrectPublishedNoteRequest $request, Note $note): RedirectResponse
+    {
+        $this->authorize('correctPublished', $note);
+        $data = $request->validated();
+
+        DB::transaction(function () use ($request, $note, $data): void {
+            $note = Note::query()->lockForUpdate()->findOrFail($note->id);
+            $this->authorize('correctPublished', $note);
+            $oldValue = [
+                'note' => $note->note,
+                'notes_td' => $note->notes_td,
+                'note_examen' => $note->note_examen,
+            ];
+            $note->update([
+                'note' => app(CalculNoteMatiere::class)->calculer($data['notes_td'], (float) $data['note_examen']),
+                'notes_td' => array_map('floatval', $data['notes_td']),
+                'note_examen' => $data['note_examen'],
+            ]);
+            HistoriqueNote::create([
+                'note_id' => $note->id,
+                'ancienne_valeur' => $oldValue,
+                'nouvelle_valeur' => [
+                    'note' => $note->note,
+                    'notes_td' => $note->notes_td,
+                    'note_examen' => $note->note_examen,
+                ],
+                'user_id' => $request->user()->id,
+                'modifie_le' => now(),
+                'motif' => $data['motif'],
+            ]);
+
+            ResultatAnnuel::query()
+                ->where('etudiant_id', $note->etudiant_id)
+                ->where('annee_academique_id', $note->annee_academique_id)
+                ->lockForUpdate()
+                ->first()
+                ?->update(['a_recalculer' => true]);
+        });
+
+        return back()->with('success', 'Note publiée corrigée et modification historisée.');
     }
 
     public function publish(Matiere $matiere, AnneeAcademique $annee): RedirectResponse

@@ -79,15 +79,21 @@ class ValidationAnneeService
                 'annee_academique_id' => $annee->id,
             ]);
             $decisionFinaleModifiee = $resultat->exists && $resultat->modifiee_par !== null;
+            $decisionPubliee = $resultat->exists && $resultat->publie_le !== null;
 
             $resultat->moyenne_generale = round($moyenne, 2);
             $resultat->credits_obtenus = $credits;
-            $resultat->decision_auto = $decision;
-            if (! $decisionFinaleModifiee) {
-                $resultat->decision_finale = $decision;
-                $resultat->modifiee_par = null;
-                $resultat->motif = null;
+            if (! $decisionPubliee) {
+                $resultat->decision_auto = $decision;
+                if (! $decisionFinaleModifiee) {
+                    $resultat->decision_finale = $decision;
+                    $resultat->modifiee_par = null;
+                    $resultat->motif = null;
+                }
+            } elseif ($resultat->decision_finale !== null) {
+                $resultat->decision_auto = $decision;
             }
+            $resultat->a_recalculer = false;
             $resultat->save();
 
             return $resultat;

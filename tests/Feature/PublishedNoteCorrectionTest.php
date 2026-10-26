@@ -1,0 +1,236 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\AnneeAcademique;
+use App\Models\Filiere;
+use App\Models\HistoriqueNote;
+use App\Models\Inscription;
+use App\Models\Matiere;
+use App\Models\Niveau;
+use App\Models\Note;
+use App\Models\ResultatAnnuel;
+use App\Models\User;
+use App\Services\ValidationAnneeService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class PublishedNoteCorrectionTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite();
+    }
+
+    public function test_teacher_cannot_change_a_published_note_through_the_regular_entry_route(): void
+    {
+        ['teacher' => $teacher, 'note' => $note] = $this->createAcademicFixture();
+        $publicationDate = $note->publie_le;
+
+        $this->actingAs($teacher)
+            ->post(route('enseignant.notes.store'), $this->noteInput($note, [16, 16], 16))
+            ->assertForbidden();
+
+        $note->refresh();
+        $this->assertSame('publie', $note->statut);
+        $this->assertSame('9.00', $note->note);
+        $this->assertTrue($publicationDate->equalTo($note->publie_le));
+        $this->assertDatabaseCount('historique_notes', 0);
+    }
+
+    public function test_teacher_can_update_a_draft_note_for_their_assigned_subject(): void
+    {
+        ['teacher' => $teacher, 'note' => $note] = $this->createAcademicFixture('brouillon');
+
+        $this->actingAs($teacher)
+            ->post(route('enseignant.notes.store'), $this->noteInput($note, [16, 16], 16))
+            ->assertRedirect();
+
+        $note->refresh();
+        $this->assertSame('brouillon', $note->statut);
+        $this->assertSame('16.00', $note->note);
+        $this->assertNull($note->publie_le);
+        $this->assertDatabaseCount('notes', 1);
+    }
+
+    public function test_admin_correction_is_historized_and_marks_an_existing_result_for_recalculation(): void
+    {
+        ['admin' => $admin, 'student' => $student, 'year' => $year, 'note' => $note] = $this->createAcademicFixture();
+        $publicationDate = $note->publie_le;
+        $resultPublicationDate = now()->subDay();
+        $resultat = ResultatAnnuel::create([
+            'etudiant_id' => $student->id,
+            'annee_academique_id' => $year->id,
+            'moyenne_generale' => 9,
+            'credits_obtenus' => 0,
+            'decision_auto' => 'ajourne',
+            'decision_finale' => 'ajourne',
+            'publie_le' => $resultPublicationDate,
+        ]);
+        $resultPublicationDate = $resultat->fresh()->publie_le;
+        $payload = $this->noteInput($note, [15, 15], 15) + ['motif' => 'Correction après vérification du procès-verbal.'];
+
+        $this->actingAs($admin)
+            ->put(route('admin.notes.correct', $note), $payload)
+            ->assertRedirect();
+
+        $note->refresh();
+        $this->assertSame('publie', $note->statut);
+        $this->assertSame('15.00', $note->note);
+        $this->assertTrue($publicationDate->equalTo($note->publie_le));
+
+        $history = HistoriqueNote::firstOrFail();
+        $this->assertSame((int) $note->id, (int) $history->note_id);
+        $this->assertSame((int) $admin->id, (int) $history->user_id);
+        $this->assertSame('Correction après vérification du procès-verbal.', $history->motif);
+        $this->assertNotNull($history->modifie_le);
+        $this->assertSame('9.00', $history->ancienne_valeur['note']);
+        $this->assertSame('15.00', $history->nouvelle_valeur['note']);
+
+        $resultat->refresh();
+        $this->assertTrue($resultat->a_recalculer);
+        $this->assertSame('ajourne', $resultat->decision_auto);
+        $this->assertSame('ajourne', $resultat->decision_finale);
+        $this->assertTrue($resultPublicationDate->equalTo($resultat->publie_le));
+
+        app(ValidationAnneeService::class)->calculer($student, $year);
+
+        $resultat->refresh();
+        $this->assertFalse($resultat->a_recalculer);
+        $this->assertSame('admis', $resultat->decision_auto);
+        $this->assertSame('ajourne', $resultat->decision_finale);
+        $this->assertSame('15.00', $resultat->moyenne_generale);
+        $this->assertSame(60, $resultat->credits_obtenus);
+        $this->assertTrue($resultPublicationDate->equalTo($resultat->publie_le));
+    }
+
+    public function test_admin_correction_requires_a_motif_and_changes_nothing_when_missing(): void
+    {
+        ['admin' => $admin, 'note' => $note] = $this->createAcademicFixture();
+        $publicationDate = $note->publie_le;
+
+        $this->actingAs($admin)
+            ->from(route('admin.notes'))
+            ->put(route('admin.notes.correct', $note), $this->noteInput($note, [15, 15], 15))
+            ->assertSessionHasErrors('motif');
+
+        $note->refresh();
+        $this->assertSame('9.00', $note->note);
+        $this->assertSame('publie', $note->statut);
+        $this->assertTrue($publicationDate->equalTo($note->publie_le));
+        $this->assertDatabaseCount('historique_notes', 0);
+    }
+
+    public function test_teacher_cannot_use_the_administrative_published_note_correction_route(): void
+    {
+        ['teacher' => $teacher, 'note' => $note] = $this->createAcademicFixture();
+
+        $this->actingAs($teacher)
+            ->put(route('admin.notes.correct', $note), $this->noteInput($note, [15, 15], 15) + ['motif' => 'Motif invalide.'])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('historique_notes', 0);
+        $this->assertSame('9.00', $note->fresh()->note);
+    }
+
+    public function test_admin_must_recalculate_before_recording_a_decision_for_a_flagged_result(): void
+    {
+        ['admin' => $admin, 'student' => $student, 'year' => $year] = $this->createAcademicFixture();
+        $resultat = ResultatAnnuel::create([
+            'etudiant_id' => $student->id,
+            'annee_academique_id' => $year->id,
+            'moyenne_generale' => 9,
+            'credits_obtenus' => 0,
+            'decision_auto' => 'ajourne',
+            'decision_finale' => 'ajourne',
+            'a_recalculer' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->put(route('admin.resultats.decide', $resultat), [
+                'decision_finale' => 'admis',
+                'motif' => 'Décision du jury.',
+            ])
+            ->assertStatus(409);
+
+        $this->assertSame('ajourne', $resultat->fresh()->decision_finale);
+        $this->assertDatabaseCount('journal_modifications', 0);
+    }
+
+    private function createAcademicFixture(string $status = 'publie'): array
+    {
+        $filiere = Filiere::create(['nom' => 'Informatique', 'code' => 'INFO']);
+        $niveau = Niveau::create([
+            'filiere_id' => $filiere->id,
+            'nom' => 'Licence 1',
+            'code' => 'L1',
+            'credits_requis' => 60,
+        ]);
+        $year = AnneeAcademique::create([
+            'libelle' => '2026-2027',
+            'date_debut' => '2026-09-01',
+            'date_fin' => '2027-07-31',
+        ]);
+        $teacher = User::create([
+            'name' => 'Enseignant',
+            'email' => 'teacher@test.ci',
+            'password' => 'MotDePasseSolide!',
+            'role' => 'teacher',
+        ]);
+        $admin = User::create([
+            'name' => 'Administrateur',
+            'email' => 'admin@test.ci',
+            'password' => 'MotDePasseSolide!',
+            'role' => 'admin',
+        ]);
+        $student = User::create([
+            'name' => 'Étudiant',
+            'email' => 'student@test.ci',
+            'password' => 'MotDePasseSolide!',
+            'role' => 'student',
+            'matricule' => 'ETU-1',
+            'filiere_id' => $filiere->id,
+            'niveau_id' => $niveau->id,
+        ]);
+        $subject = Matiere::create([
+            'filiere_id' => $filiere->id,
+            'niveau_id' => $niveau->id,
+            'enseignant_id' => $teacher->id,
+            'nom' => 'Algorithmique',
+            'code' => 'ALG-1',
+            'credits' => 60,
+            'coefficient' => 1,
+        ]);
+        Inscription::create([
+            'etudiant_id' => $student->id,
+            'niveau_id' => $niveau->id,
+            'annee_academique_id' => $year->id,
+        ]);
+        $note = Note::create([
+            'etudiant_id' => $student->id,
+            'matiere_id' => $subject->id,
+            'annee_academique_id' => $year->id,
+            'note' => 9,
+            'notes_td' => [9, 9],
+            'note_examen' => 9,
+            'statut' => $status,
+            'publie_le' => $status === 'publie' ? now()->subDays(2) : null,
+        ]);
+
+        return compact('admin', 'student', 'teacher', 'year', 'subject', 'note');
+    }
+
+    private function noteInput(Note $note, array $td, float $exam): array
+    {
+        return [
+            'matiere_id' => $note->matiere_id,
+            'etudiant_id' => $note->etudiant_id,
+            'annee_academique_id' => $note->annee_academique_id,
+            'notes_td' => $td,
+            'note_examen' => $exam,
+        ];
+    }
+}

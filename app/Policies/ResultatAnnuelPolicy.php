@@ -11,7 +11,7 @@ class ResultatAnnuelPolicy
     {
         return $user->role === 'admin'
             || ($user->role === 'student'
-                && $resultat->etudiant_id === $user->id
+                && (int) $resultat->etudiant_id === (int) $user->getKey()
                 && $resultat->publie_le !== null);
     }
 

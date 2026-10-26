@@ -11,12 +11,16 @@ class ResultatAnnuel extends Model
     protected $fillable = [
         'etudiant_id', 'annee_academique_id', 'moyenne_generale',
         'credits_obtenus', 'decision_auto', 'decision_finale', 'modifiee_par',
-        'motif', 'publie_le',
+        'motif', 'publie_le', 'a_recalculer',
     ];
 
     protected function casts(): array
     {
-        return ['moyenne_generale' => 'decimal:2', 'publie_le' => 'datetime'];
+        return [
+            'moyenne_generale' => 'decimal:2',
+            'publie_le' => 'datetime',
+            'a_recalculer' => 'boolean',
+        ];
     }
 
     public function etudiant()

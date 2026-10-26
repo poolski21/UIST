@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/emplois-du-temps/{emploiDuTemps}/publier', [EmploiDuTempsController::class, 'publish'])->name('emplois.publish');
         Route::get('/notes', [NoteController::class, 'index'])->name('notes');
         Route::post('/notes', [NoteController::class, 'store'])->name('notes.store');
+        Route::put('/notes/{note}/correction', [NoteController::class, 'correctPublished'])->name('notes.correct');
         Route::post('/notes/{matiere}/{annee}/publier', [NoteController::class, 'publish'])->name('notes.publish');
         Route::get('/resultats', [ResultatAnnuelController::class, 'index'])->name('resultats');
         Route::post('/resultats/calculer/{etudiant}/{annee}', [ResultatAnnuelController::class, 'calculate'])->name('resultats.calculate');

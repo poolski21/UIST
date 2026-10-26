@@ -42,11 +42,14 @@ class ResultatAnnuelController extends Controller
         $data = $request->validated();
 
         DB::transaction(function () use ($request, $resultat, $data): void {
+            $resultat = ResultatAnnuel::query()->lockForUpdate()->findOrFail($resultat->id);
+            abort_if($resultat->a_recalculer, 409, 'Recalculez le résultat avant d’enregistrer une nouvelle décision.');
             $before = $resultat->only(['decision_auto', 'decision_finale', 'motif']);
             $resultat->update([
                 'decision_finale' => $data['decision_finale'],
                 'modifiee_par' => $request->user()->id,
                 'motif' => $data['motif'],
+                'a_recalculer' => false,
             ]);
             JournalModification::create([
                 'modifie_par' => $request->user()->id,
@@ -64,6 +67,7 @@ class ResultatAnnuelController extends Controller
     public function publish(ResultatAnnuel $resultat): RedirectResponse
     {
         abort_unless(auth()->user()->role === 'admin', 403);
+        abort_if($resultat->a_recalculer, 409, 'Le résultat doit être recalculé avant sa publication.');
         if (! $resultat->publie_le) {
             $resultat->update(['publie_le' => now()]);
             $resultat->etudiant->notify(new PublicationNotification('Décision annuelle publiée', 'Votre décision de fin d’année est disponible avec votre relevé de notes.', '/espace'));

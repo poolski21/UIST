@@ -11,18 +11,23 @@ class NotePolicy
     public function view(User $user, Note $note): bool
     {
         return $user->role === 'admin'
-            || ($user->role === 'student' && $note->etudiant_id === $user->id && $note->statut === 'publie')
-            || ($user->role === 'teacher' && $note->matiere?->enseignant_id === $user->id);
+            || ($user->role === 'student' && (int) $note->etudiant_id === (int) $user->getKey() && $note->statut === 'publie')
+            || ($user->role === 'teacher' && (int) $note->matiere?->enseignant_id === (int) $user->getKey());
     }
 
     public function create(User $user, Matiere $matiere): bool
     {
         return $user->role === 'admin'
-            || ($user->role === 'teacher' && $matiere->enseignant_id === $user->id);
+            || ($user->role === 'teacher' && (int) $matiere->enseignant_id === (int) $user->getKey());
     }
 
     public function publish(User $user): bool
     {
         return $user->role === 'admin';
+    }
+
+    public function correctPublished(User $user, Note $note): bool
+    {
+        return $user->role === 'admin' && $note->statut === 'publie';
     }
 }

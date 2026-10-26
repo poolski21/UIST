@@ -12,7 +12,8 @@ class StoreNoteRequest extends FormRequest
         $matiere = Matiere::find($this->input('matiere_id'));
 
         return $this->user()?->role === 'admin'
-            || ($this->user()?->role === 'teacher' && $matiere?->enseignant_id === $this->user()->id);
+            || ($this->user()?->role === 'teacher'
+                && (int) ($matiere?->enseignant_id ?? 0) === (int) $this->user()->getKey());
     }
 
     public function rules(): array

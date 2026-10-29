@@ -12,6 +12,7 @@ use App\Models\ResultatAnnuel;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\PDF as DomPdf;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Mockery;
@@ -163,13 +164,60 @@ class AuthorizationIdorTest extends TestCase
             ->once()
             ->with('pdf.releve', Mockery::on(fn (array $data): bool => $data['resultat']->is($resultat)
                 && $data['notes']->count() === 1
-                && (int) $data['notes']->sole()->getKey() === (int) $visibleNote->getKey()))
+                && (int) $data['notes']->sole()->getKey() === (int) $visibleNote->getKey()
+                && $data['dateEdition'] instanceof Carbon))
             ->andReturn($pdf);
 
         $this->actingAs($student)
             ->get(route('releve.pdf', $resultat))
             ->assertOk()
             ->assertDownload();
+    }
+
+    public function test_releve_displays_the_stored_subject_average_and_issue_date_without_a_mention(): void
+    {
+        $student = $this->createStudent();
+        $resultat = $this->createResult($student, now());
+        $year = AnneeAcademique::findOrFail($resultat->annee_academique_id);
+        $passedSubject = Matiere::create([
+            'filiere_id' => $student->filiere_id,
+            'niveau_id' => $student->niveau_id,
+            'nom' => 'Algorithmique',
+            'code' => 'ALG-PDF',
+            'credits' => 3,
+            'coefficient' => 1.5,
+        ]);
+        $failedSubject = Matiere::create([
+            'filiere_id' => $student->filiere_id,
+            'niveau_id' => $student->niveau_id,
+            'nom' => 'Réseaux',
+            'code' => 'RES-PDF',
+            'credits' => 3,
+            'coefficient' => 2,
+        ]);
+        $passedNote = $this->createNote($student, $passedSubject, $year, 'publie');
+        $passedNote->update(['note' => 13.75]);
+        $failedNote = $this->createNote($student, $failedSubject, $year, 'publie');
+        $failedNote->update(['note' => 9.99]);
+        $resultat->load(['etudiant.filiere', 'etudiant.niveau', 'anneeAcademique']);
+
+        $html = view('pdf.releve', [
+            'resultat' => $resultat,
+            'notes' => collect([$passedNote->load('matiere'), $failedNote->load('matiere')]),
+            'dateEdition' => Carbon::parse('2026-10-28 12:00:00'),
+        ])->render();
+
+        $this->assertStringContainsString('Étudiant :', $html);
+        $this->assertStringContainsString('Matricule :', $html);
+        $this->assertStringContainsString('Filière :', $html);
+        $this->assertStringContainsString('Niveau :', $html);
+        $this->assertStringContainsString('Date d’édition :</strong> 28/10/2026', $html);
+        $this->assertStringContainsString('13,75', $html);
+        $this->assertStringContainsString('1,50', $html);
+        $this->assertStringContainsString('Validée', $html);
+        $this->assertStringContainsString('9,99', $html);
+        $this->assertStringContainsString('Non validée', $html);
+        $this->assertStringNotContainsString('Mention', $html);
     }
 
     public function test_user_cannot_mark_another_users_notification_as_read(): void

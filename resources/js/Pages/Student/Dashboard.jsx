@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import WeeklyScheduleGrid from '../../Components/WeeklyScheduleGrid';
 import PortalLayout from '../../Layouts/PortalLayout';
 import { translate as t } from '../../i18n';
 
@@ -6,7 +7,7 @@ const Card = ({ title, children }) => <section className="rounded-xl border bord
     <h2 className="mb-4 text-lg font-bold text-[#692333]">{title}</h2>{children}
 </section>;
 
-export default function StudentDashboard({ annonces = [], emploiDuTemps = [], notes = [], resultats = [], notifications = [], notificationCount = 0, week = [] }) {
+export default function StudentDashboard({ annonces = [], emploiDuTemps = [], notes = [], resultats = [], notifications = [], notificationCount = 0, weekStart = '' }) {
     const { locale = 'fr' } = usePage().props;
     return <PortalLayout title="Mon espace étudiant">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-3">
@@ -30,14 +31,8 @@ export default function StudentDashboard({ annonces = [], emploiDuTemps = [], no
                     {!annonces.length && <p className="text-sm text-slate-500">{t('Aucune annonce publiée pour le moment.', locale)}</p>}
                 </div>
             </Card></div>
-            <Card title={`${t('Emplois du temps', locale)} · ${week[0] ?? ''} – ${week[1] ?? ''}`}>
-                <div className="space-y-3">
-                    {emploiDuTemps.map((cours) => <div key={cours.id} className="flex gap-4 rounded-lg bg-slate-50 p-3">
-                        <div className="min-w-20 text-sm font-bold text-[#1a93e8]">{cours.heure_debut?.slice(0, 5)}<br /><span className="font-normal text-slate-400">{cours.heure_fin?.slice(0, 5)}</span></div>
-                        <div><p className="font-semibold text-slate-800">{cours.titre}</p><p className="text-sm text-slate-500">{cours.date ? new Date(`${cours.date}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''} · {cours.salle || 'Salle à confirmer'}</p></div>
-                    </div>)}
-                    {!emploiDuTemps.length && <p className="text-sm text-slate-500">{t('Aucun cours planifié.', locale)}</p>}
-                </div>
+            <Card title={t('Emplois du temps', locale)}>
+                <WeeklyScheduleGrid courses={emploiDuTemps} weekStart={weekStart} />
             </Card>
             <Card title={t('Mes notes publiées', locale)}>
                 {notes.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="py-2">{t('Matière', locale)}</th><th>{t('Année', locale)}</th><th className="text-right">{t('Moyenne matière', locale)}</th></tr></thead><tbody>{notes.map((note) => <tr key={note.id} className="border-b last:border-0"><td className="py-3 font-medium">{note.matiere}{note.notes_td?.length > 0 && <small className="block font-normal text-slate-500">{t('TD', locale)} : {note.notes_td.map((score) => Number(score).toFixed(2)).join(' · ')} · {t('Examen', locale)} : {Number(note.note_examen).toFixed(2)}</small>}</td><td>{note.annee}</td><td className="text-right"><strong>{note.note.toFixed(2)} / 20</strong><small className={`block font-semibold ${note.validee ? 'text-emerald-700' : 'text-rose-700'}`}>{t(note.validee ? 'Matière validée' : 'Matière non validée', locale)}</small></td></tr>)}</tbody></table></div> : <p className="text-sm text-slate-500">{t('Vos notes apparaîtront ici après leur publication par l’administration.', locale)}</p>}
@@ -45,7 +40,7 @@ export default function StudentDashboard({ annonces = [], emploiDuTemps = [], no
             <Card title={t('Décision de fin d’année', locale)}>
                 <div className="space-y-3">{resultats.map((resultat) => <div key={resultat.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4">
                     <div><p className="font-semibold text-slate-800">{resultat.annee}</p><p className="text-sm text-slate-500">{t('Moyenne générale :', locale)} {resultat.moyenne.toFixed(2)} / 20 · {resultat.credits} {t('crédits', locale)}</p><p className={`mt-1 text-sm font-bold ${resultat.decision === 'admis' ? 'text-emerald-700' : 'text-rose-700'}`}>{t(resultat.decision === 'admis' ? 'ADMIS' : 'AJOURNÉ', locale)}</p></div>
-                    <a href={resultat.pdf} className="w-full rounded-lg bg-[#1a93e8] px-4 py-2 text-center text-sm font-semibold text-white sm:w-auto">{t('Télécharger le relevé PDF', locale)}</a>
+                    <a href={resultat.pdf} className="w-full rounded-lg bg-[#1a93e8] px-4 py-2 text-center text-sm font-semibold text-white sm:w-auto">{t('Télécharger en PDF', locale)}</a>
                 </div>)}{!resultats.length && <p className="text-sm text-slate-500">{t('Votre décision sera affichée après publication par l’administration.', locale)}</p>}</div>
             </Card>
         </div>

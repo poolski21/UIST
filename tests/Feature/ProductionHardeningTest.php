@@ -32,13 +32,15 @@ class ProductionHardeningTest extends TestCase
     public function test_production_seeder_creates_the_initial_admin_but_skips_demo_accounts(): void
     {
         $this->app->instance('env', 'production');
-        config(['uist2its.admin_initial_password' => null]);
+        config(['uist2its.admin_initial_password' => 'InitialAdminPassword!2026']);
 
         Artisan::call('db:seed', [
             '--class' => DatabaseSeeder::class,
             '--force' => true,
         ]);
 
+        $admin = User::query()->where('email', 'admin@uist.ci')->firstOrFail();
+        $this->assertTrue(Hash::check('InitialAdminPassword!2026', $admin->password));
         $this->assertDatabaseHas('users', [
             'email' => 'admin@uist.ci',
             'role' => 'admin',
@@ -47,6 +49,35 @@ class ProductionHardeningTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'enseignant1@uist.ci']);
         $this->assertDatabaseMissing('users', ['matricule' => 'UIST-2026-0001']);
         $this->assertStringContainsString('données et comptes de démonstration ne seront pas créés', Artisan::output());
+        $this->assertStringNotContainsString('InitialAdminPassword!2026', Artisan::output());
+    }
+
+    public function test_production_seeder_fails_without_an_initial_password_when_users_is_empty(): void
+    {
+        $this->app->instance('env', 'production');
+        config(['uist2its.admin_initial_password' => null]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('ADMIN_INITIAL_PASSWORD doit être défini');
+
+        app(DatabaseSeeder::class)->run();
+    }
+
+    public function test_production_seeder_skips_initial_admin_creation_when_users_already_exist(): void
+    {
+        $this->app->instance('env', 'production');
+        config(['uist2its.admin_initial_password' => null]);
+        $existingUser = User::create([
+            'name' => 'Enseignant existant',
+            'email' => 'existing-teacher@test.ci',
+            'password' => 'MotDePasseSolide!',
+            'role' => 'teacher',
+        ]);
+
+        app(DatabaseSeeder::class)->run();
+
+        $this->assertModelExists($existingUser);
+        $this->assertDatabaseCount('users', 1);
     }
 
     public function test_non_production_seeder_still_creates_demo_accounts(): void

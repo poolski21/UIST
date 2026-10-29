@@ -122,7 +122,11 @@ class ResultatAnnuelController extends Controller
             ->where('statut', 'publie')
             ->get();
 
-        return Pdf::loadView('pdf.releve', compact('resultat', 'notes'))
+        return Pdf::loadView('pdf.releve', [
+            'resultat' => $resultat,
+            'notes' => $notes,
+            'dateEdition' => now(),
+        ])
             ->download('releve-'.$resultat->etudiant->matricule.'-'.$resultat->anneeAcademique->libelle.'.pdf');
     }
 }

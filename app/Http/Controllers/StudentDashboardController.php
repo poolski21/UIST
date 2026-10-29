@@ -7,7 +7,9 @@ use App\Http\Resources\EmploiDuTempsResource;
 use App\Http\Resources\NoteResource;
 use App\Models\Annonce;
 use App\Models\EmploiDuTemps;
+use App\Models\Matiere;
 use App\Models\ResultatAnnuel;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,8 +19,13 @@ class StudentDashboardController extends Controller
     public function __invoke(Request $request): Response
     {
         $student = $request->user();
-        $weekStart = now()->startOfWeek();
-        $weekEnd = now()->endOfWeek();
+        $filters = $request->validate([
+            'week_start' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+        $weekStart = Carbon::parse($filters['week_start'] ?? now())
+            ->startOfWeek(Carbon::MONDAY)
+            ->startOfDay();
+        $weekEnd = $weekStart->copy()->addDays(5);
 
         $annonces = Annonce::query()
             ->whereNotNull('publiee_le')
@@ -30,9 +37,10 @@ class StudentDashboardController extends Controller
             ->get();
 
         $schedule = EmploiDuTemps::query()
-            ->with(['filiere', 'niveau'])
-            ->where('statut', 'publie')
-            ->whereBetween('date_cours', [$weekStart->toDateString(), $weekEnd->toDateString()])
+            ->with(['filiere', 'niveau', 'matiere.enseignant', 'enseignant'])
+            ->published()
+            ->whereDate('date_cours', '>=', $weekStart->toDateString())
+            ->whereDate('date_cours', '<=', $weekEnd->toDateString())
             ->whereNotNull('filiere_id')
             ->whereNotNull('niveau_id')
             ->where('filiere_id', $student->filiere_id)
@@ -40,6 +48,11 @@ class StudentDashboardController extends Controller
             ->orderBy('date_cours')
             ->orderBy('heure_debut')
             ->get();
+        $colorIndexes = Matiere::colorIndexesById();
+        $schedule->each(fn (EmploiDuTemps $course) => $course->setAttribute(
+            'subject_color_index',
+            $colorIndexes[$course->matiere_id] ?? null,
+        ));
 
         $notes = $student->notes()
             ->with(['matiere', 'anneeAcademique'])
@@ -68,6 +81,7 @@ class StudentDashboardController extends Controller
             'notificationCount' => $student->unreadNotifications()->count(),
             'notifications' => $student->notifications()->latest()->take(10)->get(['id', 'data', 'read_at', 'created_at']),
             'week' => [$weekStart->format('d/m/Y'), $weekEnd->format('d/m/Y')],
+            'weekStart' => $weekStart->toDateString(),
         ]);
     }
 }

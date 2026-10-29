@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\EmploiDuTemps;
+use App\Models\Matiere;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -101,6 +102,29 @@ class StoreEmploiDuTempsRequest extends FormRequest
                 return;
             }
 
+            if ($validator->errors()->has('enseignant_id') || $validator->errors()->has('publier')) {
+                return;
+            }
+
+            $matiere = Matiere::query()->find($this->input('matiere_id'));
+            if ($matiere === null) {
+                return;
+            }
+
+            $emploi = $this->route('emploiDuTemps');
+            $emploi = $emploi instanceof EmploiDuTemps ? $emploi : null;
+            $enseignantId = $this->input('enseignant_id') ?: $matiere->enseignant_id;
+            $willBePublished = $this->boolean('publier') || $emploi?->statut === 'publie';
+
+            if ($willBePublished && $enseignantId === null) {
+                $validator->errors()->add(
+                    'enseignant_id',
+                    'Une séance publiée doit avoir un enseignant, directement ou via sa matière.',
+                );
+
+                return;
+            }
+
             $date = Carbon::createFromFormat('!Y-m-d', $this->input('week_start'))
                 ->addDays((int) $this->input('jour') - 1)
                 ->toDateString();
@@ -112,33 +136,96 @@ class StoreEmploiDuTempsRequest extends FormRequest
                 ->whereTime('heure_debut', '<', $endTime)
                 ->whereTime('heure_fin', '>', $startTime);
 
-            $emploi = $this->route('emploiDuTemps');
-            $emploiId = $emploi instanceof EmploiDuTemps
-                ? $emploi->getKey()
-                : (is_numeric($emploi) ? $emploi : null);
-
-            if ($emploiId !== null) {
-                $overlaps->whereKeyNot($emploiId);
+            if ($emploi !== null) {
+                $overlaps->whereKeyNot($emploi->getKey());
             }
 
-            $sameClass = (clone $overlaps)
-                ->where('filiere_id', $this->input('filiere_id'))
-                ->where('niveau_id', $this->input('niveau_id'))
-                ->exists();
+            $overlappingSessions = (clone $overlaps)
+                ->with(['matiere', 'filiere', 'niveau'])
+                ->get();
 
-            if ($sameClass) {
+            $sameClassConflict = $overlappingSessions->first(fn (EmploiDuTemps $session): bool => (
+                (string) $session->filiere_id === (string) $this->input('filiere_id')
+                && (string) $session->niveau_id === (string) $this->input('niveau_id')
+            ));
+
+            if ($sameClassConflict !== null) {
                 $validator->errors()->add('jour', 'Une autre séance de cette classe chevauche déjà cet horaire.');
             }
 
-            if ($this->filled('enseignant_id')
-                && (clone $overlaps)->where('enseignant_id', $this->input('enseignant_id'))->exists()) {
-                $validator->errors()->add('enseignant_id', 'Cet enseignant a déjà une séance qui chevauche cet horaire.');
+            $teacherConflict = $enseignantId === null
+                ? null
+                : $overlappingSessions->first(function (EmploiDuTemps $session) use ($enseignantId, $matiere, $date, $startTime, $endTime): bool {
+                    $existingTeacherId = $session->enseignant_id ?? $session->matiere?->enseignant_id;
+
+                    return (string) $existingTeacherId === (string) $enseignantId
+                        && ! $this->isSharedCourse(
+                            $session,
+                            $matiere,
+                            $date,
+                            $startTime,
+                            $endTime,
+                        );
+                });
+
+            if ($teacherConflict !== null) {
+                $validator->errors()->add(
+                    'enseignant_id',
+                    'Cet enseignant a déjà une séance en conflit : '.$this->describeSession($teacherConflict).'.',
+                );
             }
 
-            if ($this->filled('salle')
-                && (clone $overlaps)->where('salle', $this->input('salle'))->exists()) {
-                $validator->errors()->add('salle', 'Cette salle est déjà occupée pendant cet horaire.');
+            $room = trim((string) $this->input('salle'));
+            $roomConflict = $room === ''
+                ? null
+                : $overlappingSessions->first(fn (EmploiDuTemps $session): bool => (
+                    trim((string) $session->salle) === $room
+                    && ! $this->isSharedCourse($session, $matiere, $date, $startTime, $endTime)
+                ));
+
+            if ($roomConflict !== null) {
+                $validator->errors()->add(
+                    'salle',
+                    'Cette salle est déjà occupée par la séance « '.$this->describeSession($roomConflict).'».',
+                );
             }
         });
+    }
+
+    private function isSharedCourse(
+        EmploiDuTemps $session,
+        Matiere $matiere,
+        string $date,
+        string $startTime,
+        string $endTime,
+    ): bool {
+        $existingCourseName = $session->matiere?->nom ?? $session->titre;
+        $effectiveTeacherId = $this->input('enseignant_id') ?: $matiere->enseignant_id;
+        $existingTeacherId = $session->enseignant_id ?? $session->matiere?->enseignant_id;
+
+        return $session->date_cours?->toDateString() === $date
+            && $effectiveTeacherId !== null
+            && (string) $existingTeacherId === (string) $effectiveTeacherId
+            && $existingCourseName === $matiere->nom
+            && substr((string) $session->heure_debut, 0, 5) === substr($startTime, 0, 5)
+            && substr((string) $session->heure_fin, 0, 5) === substr($endTime, 0, 5)
+            && trim((string) $session->salle) !== ''
+            && trim((string) $session->salle) === trim((string) $this->input('salle'))
+            && (
+                (string) $session->filiere_id !== (string) $this->input('filiere_id')
+                || (string) $session->niveau_id !== (string) $this->input('niveau_id')
+            );
+    }
+
+    private function describeSession(EmploiDuTemps $session): string
+    {
+        $class = collect([$session->filiere?->nom, $session->niveau?->nom])
+            ->filter()
+            ->implode(' · ');
+
+        return $session->titre.' — '.$session->date_cours?->toDateString()
+            .' '.substr((string) $session->heure_debut, 0, 5)
+            .'–'.substr((string) $session->heure_fin, 0, 5)
+            .($class !== '' ? ' ('.$class.')' : '');
     }
 }

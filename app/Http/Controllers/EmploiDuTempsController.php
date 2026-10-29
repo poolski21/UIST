@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -78,11 +79,27 @@ class EmploiDuTempsController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name']),
             'conflits' => EmploiDuTemps::query()
+                ->with([
+                    'matiere:id,enseignant_id,nom',
+                    'filiere:id,nom',
+                    'niveau:id,nom',
+                ])
                 ->whereBetween('date_cours', [
                     $weekStart->toDateString(),
                     $weekStart->copy()->addDays(5)->toDateString(),
                 ])
-                ->get(['id', 'date_cours', 'heure_debut', 'heure_fin', 'filiere_id', 'niveau_id', 'enseignant_id', 'salle']),
+                ->get([
+                    'id',
+                    'titre',
+                    'matiere_id',
+                    'date_cours',
+                    'heure_debut',
+                    'heure_fin',
+                    'filiere_id',
+                    'niveau_id',
+                    'enseignant_id',
+                    'salle',
+                ]),
             'selection' => [
                 'filiere_id' => $filters['filiere_id'] ?? '',
                 'niveau_id' => $filters['niveau_id'] ?? '',
@@ -127,6 +144,13 @@ class EmploiDuTempsController extends Controller
     {
         abort_unless(auth()->user()->role === 'admin', 403);
         if ($emploiDuTemps->statut !== 'publie') {
+            $emploiDuTemps->loadMissing('matiere');
+            if (($emploiDuTemps->enseignant_id ?? $emploiDuTemps->matiere?->enseignant_id) === null) {
+                throw ValidationException::withMessages([
+                    'enseignant_id' => 'La séance « '.$emploiDuTemps->titre.' » ne peut pas être publiée sans enseignant.',
+                ]);
+            }
+
             $emploiDuTemps->update([
                 'statut' => 'publie',
                 'publie_par' => auth()->id(),
@@ -173,9 +197,20 @@ class EmploiDuTempsController extends Controller
                 $weekStart->copy()->addDays(5)->toDateString(),
             ])
             ->where('statut', 'brouillon')
+            ->with('matiere')
             ->orderBy('date_cours')
             ->orderBy('heure_debut')
             ->get();
+
+        $unassignedSession = $drafts->first(fn (EmploiDuTemps $emploi): bool => (
+            ($emploi->enseignant_id ?? $emploi->matiere?->enseignant_id) === null
+        ));
+
+        if ($unassignedSession !== null) {
+            throw ValidationException::withMessages([
+                'enseignant_id' => 'La séance « '.$unassignedSession->titre.' » ne peut pas être publiée sans enseignant.',
+            ]);
+        }
 
         foreach ($drafts as $emploi) {
             $emploi->update([

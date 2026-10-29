@@ -53,9 +53,7 @@ class AuthController extends Controller
         $request->session()->regenerate();
         $this->journaliser($request, $etudiant, $matricule, true, 'matricule');
 
-        return redirect()->intended($etudiant->password_change_required
-            ? route('admin.passwords.index')
-            : route('espace'));
+        return to_route('espace');
     }
 
     public function user(UserLoginRequest $request): RedirectResponse
@@ -75,9 +73,13 @@ class AuthController extends Controller
         Auth::login($candidate);
         $request->session()->regenerate();
 
-        return redirect()->intended($candidate->password_change_required
-            ? route('admin.passwords.index')
-            : route('espace'));
+        if ($candidate->password_change_required) {
+            return $candidate->role === 'admin'
+                ? to_route('admin.passwords.index')
+                : to_route('password.change');
+        }
+
+        return to_route('espace');
     }
 
     public function destroy(): RedirectResponse

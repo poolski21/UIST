@@ -39,6 +39,36 @@ class EmploiDuTempsTest extends TestCase
         $this->assertDatabaseCount('emplois_du_temps', 0);
     }
 
+    public function test_session_creation_rejects_a_missing_matiere(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+
+        $this->actingAs($admin)
+            ->post(route('admin.emplois.store'), $this->validPayload($filiere, $niveau, $teacher, $subject, [
+                'matiere_id' => null,
+            ]))
+            ->assertSessionHasErrors('matiere_id');
+
+        $this->assertDatabaseCount('emplois_du_temps', 0);
+    }
+
+    public function test_session_update_rejects_removing_its_matiere(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $session = $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 1', '08:00', '09:00');
+
+        $this->actingAs($admin)
+            ->put(route('admin.emplois.update', $session), $this->validPayload($filiere, $niveau, $teacher, $subject, [
+                'matiere_id' => null,
+            ]))
+            ->assertSessionHasErrors('matiere_id');
+
+        $this->assertDatabaseHas('emplois_du_temps', [
+            'id' => $session->id,
+            'matiere_id' => $subject->id,
+        ]);
+    }
+
     public function test_session_rejects_end_time_not_after_start_time(): void
     {
         ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
@@ -101,6 +131,134 @@ class EmploiDuTempsTest extends TestCase
             ->assertSessionHasErrors('enseignant_id');
 
         $this->assertDatabaseCount('emplois_du_temps', 1);
+    }
+
+    public function test_teacher_overlap_uses_the_subject_teacher_when_the_session_has_no_direct_assignment(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $otherClass = $this->makeClass('GEST', 'L1', 'teacher-fallback-conflict');
+        $existing = $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 1', '10:00', '11:00');
+        $existing->update(['enseignant_id' => null]);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.emplois.store'), $this->validPayload(
+                $otherClass['filiere'],
+                $otherClass['niveau'],
+                $teacher,
+                $otherClass['subject'],
+                ['heure_debut' => '10:30', 'heure_fin' => '11:30', 'salle' => 'Room 2'],
+            ));
+
+        $response->assertSessionHasErrors('enseignant_id');
+        $this->assertStringContainsString(
+            'Algorithmique SUBJECT-base',
+            $response->getSession()->get('errors')->get('enseignant_id')[0],
+        );
+        $this->assertDatabaseCount('emplois_du_temps', 1);
+    }
+
+    public function test_same_course_can_be_shared_across_classes_at_the_same_time_and_in_the_same_room(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $otherClass = $this->makeClass('GEST', 'L1', 'shared-course');
+        $otherClass['subject']->update(['nom' => $subject->nom]);
+        $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 1', '10:00', '11:00');
+
+        $this->actingAs($admin)
+            ->post(route('admin.emplois.store'), $this->validPayload(
+                $otherClass['filiere'],
+                $otherClass['niveau'],
+                $teacher,
+                $otherClass['subject'],
+                ['heure_debut' => '10:00', 'heure_fin' => '11:00', 'salle' => 'Room 1'],
+            ))
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('emplois_du_temps', 2);
+    }
+
+    public function test_shared_course_exception_does_not_allow_a_room_conflict_with_another_teacher(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $otherClass = $this->makeClass('GEST', 'L1', 'shared-course-room-conflict');
+        $otherClass['subject']->update(['nom' => $subject->nom]);
+        $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 1', '10:00', '11:00');
+
+        $this->actingAs($admin)
+            ->post(route('admin.emplois.store'), $this->validPayload(
+                $otherClass['filiere'],
+                $otherClass['niveau'],
+                $otherClass['teacher'],
+                $otherClass['subject'],
+                ['heure_debut' => '10:00', 'heure_fin' => '11:00', 'salle' => 'Room 1'],
+            ))
+            ->assertSessionHasErrors('salle');
+
+        $this->assertDatabaseCount('emplois_du_temps', 1);
+    }
+
+    public function test_published_session_requires_an_effective_teacher(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $subject->update(['enseignant_id' => null]);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.emplois.store'), $this->validPayload($filiere, $niveau, $teacher, $subject, [
+                'enseignant_id' => null,
+                'publier' => true,
+            ]));
+
+        $response->assertSessionHasErrors('enseignant_id');
+        $this->assertSame(
+            'Une séance publiée doit avoir un enseignant, directement ou via sa matière.',
+            $response->getSession()->get('errors')->get('enseignant_id')[0],
+        );
+
+        $this->assertDatabaseCount('emplois_du_temps', 0);
+    }
+
+    public function test_updating_a_published_session_cannot_remove_its_only_effective_teacher(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $subject->update(['enseignant_id' => null]);
+        $session = $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 1', '08:00', '09:00');
+        $session->update(['enseignant_id' => null, 'statut' => 'publie']);
+
+        $this->actingAs($admin)
+            ->put(route('admin.emplois.update', $session), $this->validPayload($filiere, $niveau, $teacher, $subject, [
+                'enseignant_id' => null,
+            ]))
+            ->assertSessionHasErrors('enseignant_id');
+
+        $this->assertDatabaseHas('emplois_du_temps', [
+            'id' => $session->id,
+            'statut' => 'publie',
+            'enseignant_id' => null,
+        ]);
+    }
+
+    public function test_a_draft_without_a_teacher_cannot_be_published_individually_or_as_a_week(): void
+    {
+        ['admin' => $admin, 'filiere' => $filiere, 'niveau' => $niveau, 'teacher' => $teacher, 'subject' => $subject] = $this->makeClass();
+        $subject->update(['enseignant_id' => null]);
+        $session = $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 1', '08:00', '09:00');
+        $session->update(['enseignant_id' => null]);
+        $assignedDraft = $this->makeSession($filiere, $niveau, $subject, $teacher, 'Room 2', '09:00', '10:00', '2026-10-20');
+
+        $this->actingAs($admin)
+            ->post(route('admin.emplois.publish', $session))
+            ->assertSessionHasErrors('enseignant_id');
+
+        $this->actingAs($admin)
+            ->post(route('admin.emplois.publish-week'), [
+                'filiere_id' => $filiere->id,
+                'niveau_id' => $niveau->id,
+                'week_start' => '2026-10-19',
+            ])
+            ->assertSessionHasErrors('enseignant_id');
+
+        $this->assertDatabaseHas('emplois_du_temps', ['id' => $session->id, 'statut' => 'brouillon']);
+        $this->assertDatabaseHas('emplois_du_temps', ['id' => $assignedDraft->id, 'statut' => 'brouillon']);
     }
 
     public function test_overlapping_sessions_for_the_same_room_are_rejected_across_classes(): void

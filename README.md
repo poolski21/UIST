@@ -47,20 +47,12 @@ Vérifier la base ciblée avant l’exécution ; le trait `RefreshDatabase` réi
 
 ## Déploiement sur Render avec Docker
 
-1. Créer une base PostgreSQL 16 sur Render. Copier son **Internal Database URL** ; ne pas le placer dans Git.
-2. Créer un Web Service depuis le dépôt, choisir l’environnement **Docker** et le Dockerfile à la racine. L’image utilise Apache avec `public/` comme document root ; elle construit les ressources avec `npm ci && npm run build` et écoute sur le `PORT` fourni par Render (10000 par défaut hors Render).
-3. Définir dans l’environnement du Web Service les variables de `.env.production.example`, au minimum `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, `APP_KEY`, `DB_CONNECTION=pgsql`, `DB_URL`, les options de session, `QUEUE_CONNECTION` et les paramètres mail si les courriels sont souhaités.
-4. Générer une clé avec `php artisan key:generate --show` dans un environnement de confiance, puis enregistrer le résultat comme `APP_KEY` dans Render. Remplacer les valeurs `change-moi`/`change-me` ; elles sont uniquement des exemples.
-5. Au démarrage, le conteneur exécute `php artisan migrate --force`, puis lance Apache. Aucune route cache n’est créée, car la route `/espace` est déclarée avec une closure.
-6. Depuis le Shell Render du Web Service, créer le premier compte administrateur avec la commande ci-dessous. En production, le seeder crée ce compte puis ignore les comptes et données de démonstration. Sans `ADMIN_INITIAL_PASSWORD`, il affiche un secret aléatoire une seule fois et impose son remplacement à la première connexion :
-
-   ```bash
-   php artisan db:seed --force
-   ```
-
-   Si `admin@uist.ci` existe déjà, le seeder ne change pas son mot de passe. N’exécuter jamais en production un ancien seeder ou une version du code antérieure à la protection production.
-7. Vérifier le service via `https://<nom-du-service>.onrender.com/up`.
-8. Configurer une destination persistante (Render Disk ou stockage objet) avant de conserver des pièces jointes : le système de fichiers local d’un conteneur Render peut être éphémère. Prévoir également un worker séparé si le pilote de queue est ensuite changé en `database`.
+1. Utiliser le Blueprint `render.yaml` à la racine pour créer le Web Service Docker, la base PostgreSQL et le disque des fichiers publics. Les services sont placés dans la région Frankfurt.
+2. L’image PHP 8.3 construit les ressources avec `npm ci && npm run build`, sert `public/` avec Apache et écoute sur le `PORT` fourni par Render (10000 par défaut hors Render).
+3. Renseigner les variables marquées `sync: false` dans Render : `APP_KEY`, `APP_URL` (URL HTTPS du Web Service), et `ADMIN_INITIAL_PASSWORD` (au moins 16 caractères). Les paramètres SMTP sont requis si les courriels sont souhaités. `DB_URL` est reliée automatiquement à la base du Blueprint.
+4. Générer une clé avec `php artisan key:generate --show` dans un environnement de confiance, puis l’enregistrer comme `APP_KEY` dans Render. Ne pas placer cette valeur dans Git.
+5. Au démarrage, le conteneur exécute `php artisan migrate --force`, puis le seeder initial, les caches de configuration/routes/vues et Apache. Le premier compte admin est créé uniquement si `users` est vide et si `ADMIN_INITIAL_PASSWORD` est défini. Dans les autres cas, aucun compte n’est créé ; un mot de passe absent sur une base vide fait échouer le démarrage sans afficher de secret. Les comptes existants ne sont pas modifiés.
+6. Vérifier le service via `https://<nom-du-service>.onrender.com/up`. Les pièces jointes et images publiques sont conservées sur le disque Render du Blueprint ; ce disque convient à une instance unique, et un stockage objet sera préférable pour un déploiement multi-instance. Prévoir également un worker séparé si le pilote de queue est ensuite changé en `database`.
 
 Avant chaque migration risquée, sauvegarder la base PostgreSQL. Exemple de sauvegarde depuis un environnement autorisé possédant `pg_dump` :
 
@@ -85,13 +77,13 @@ php artisan admin:reset-password admin@uist.ci
 
 La commande génère un secret aléatoire fort, met à jour uniquement l’adresse e-mail fournie si elle appartient à un administrateur, et affiche le secret une seule fois dans la console. Transmettez-le par un canal sûr. À sa prochaine connexion, l’administrateur devra le remplacer par un mot de passe personnel d’au moins 16 caractères, avec majuscules, minuscules, chiffres et symbole. Les réinitialisations et changements sont enregistrés dans `admin_password_changes`, sans jamais conserver le mot de passe.
 
-Pour créer le premier compte administrateur sur une installation neuve, renseignez éventuellement `ADMIN_INITIAL_PASSWORD` dans `.env` avant le seeding ; cette valeur doit contenir au moins 16 caractères. Si elle est vide, le seeder génère un secret aléatoire, l’affiche une seule fois dans la console et impose son remplacement à la première connexion. Cette variable ne réinitialise pas les comptes déjà créés.
+Pour créer le premier compte administrateur en production, `ADMIN_INITIAL_PASSWORD` est obligatoire et doit contenir au moins 16 caractères. Le seeder ne génère et n’affiche jamais de mot de passe en production. Il ne modifie aucun compte existant ; un redémarrage ne réinitialise donc pas le mot de passe admin.
 
 ## Connexion et sécurité
 
 Les étudiants s’authentifient avec leur matricule permanent et leur date de naissance, obligatoire. Les tentatives sont limitées par adresse IP et matricule ; un matricule ou une date de naissance incorrects produisent le même message d’erreur et chaque succès ou échec est conservé dans `connexions_log`.
 
-Les enseignants utilisent leur adresse e-mail et leur mot de passe. Les policies Laravel et le middleware `role` cloisonnent l’administration, la saisie des matières attribuées, les notes personnelles et les décisions publiées. Les pièces jointes sont stockées sur le disque public ; lancer `php artisan storage:link` pour les servir.
+Les enseignants utilisent leur adresse e-mail et leur mot de passe. Les policies Laravel et le middleware `role` cloisonnent l’administration, la saisie des matières attribuées, les notes personnelles et les décisions publiées. Les pièces jointes sont stockées sur le disque public ; l’image Docker crée le lien `public/storage` lors du build (en local, lancer `php artisan storage:link`).
 
 Un étudiant ne reçoit que les emplois du temps qui correspondent exactement à sa filière et à son niveau. Les listes de classe sont réservées à l’administration et établies à partir des inscriptions de l’année universitaire sélectionnée ; l’année active est sélectionnée par défaut.
 

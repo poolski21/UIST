@@ -34,7 +34,10 @@ export default function PortalLayout({ title, children }) {
             ['/admin/listes-classe', 'Listes de classe', UsersRound],
         ]
         : user?.role === 'teacher'
-            ? [['/enseignant/notes', 'Saisie des notes', NotebookPen]]
+            ? [
+                ['/enseignant/mon-programme', 'Mon programme', CalendarDays],
+                ['/enseignant/notes', 'Saisie des notes', NotebookPen],
+            ]
             : [['/etudiant', 'Mon espace', House]];
 
     return <div className="min-h-screen bg-slate-50">

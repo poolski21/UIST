@@ -14,15 +14,19 @@ class RequireAdminPasswordChange
         $allowedRoutes = [
             'admin.passwords.index',
             'admin.passwords.update',
+            'password.change',
+            'password.change.update',
             'logout',
         ];
 
         if (
-            $user?->role === 'admin'
+            in_array($user?->role, ['admin', 'teacher'], true)
             && $user->password_change_required
             && ! in_array($request->route()?->getName(), $allowedRoutes, true)
         ) {
-            return redirect()->route('admin.passwords.index');
+            return $user->role === 'admin'
+                ? redirect()->route('admin.passwords.index')
+                : redirect()->route('password.change');
         }
 
         return $next($request);

@@ -10,8 +10,10 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\ResultatAnnuelController;
 use App\Http\Controllers\StudentDashboardController;
+use App\Http\Controllers\TeacherProgramController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -24,6 +26,11 @@ Route::middleware('guest')->group(function () {
 Route::post('/deconnexion', [AuthController::class, 'destroy'])->middleware('auth')->name('logout');
 
 Route::middleware('auth')->group(function () {
+    Route::middleware('role:teacher')->group(function () {
+        Route::get('/securite/mot-de-passe', [PasswordChangeController::class, 'edit'])->name('password.change');
+        Route::put('/securite/mot-de-passe', [PasswordChangeController::class, 'update'])->name('password.change.update');
+    });
+
     Route::get('/espace', function () {
         return match (auth()->user()->role) {
             'student' => redirect()->route('etudiant.dashboard'),
@@ -41,6 +48,7 @@ Route::middleware('auth')->group(function () {
         ->name('releve.pdf');
 
     Route::prefix('enseignant')->name('enseignant.')->middleware('role:teacher')->group(function () {
+        Route::get('/mon-programme', TeacherProgramController::class)->name('programme');
         Route::get('/notes', [NoteController::class, 'index'])->name('notes');
         Route::post('/notes', [NoteController::class, 'store'])->name('notes.store');
     });

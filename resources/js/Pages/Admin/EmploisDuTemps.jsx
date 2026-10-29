@@ -140,6 +140,7 @@ export default function EmploisDuTemps({
         const weekStart = selection.week_start;
         const date = String(emploi.date_cours).slice(0, 10);
         const day = Math.round((new Date(`${date}T12:00:00`) - new Date(`${weekStart}T12:00:00`)) / 86400000) + 1;
+        const subject = matieres.find((item) => String(item.id) === String(emploi.matiere_id));
 
         setEditing(emploi);
         form.clearErrors();
@@ -149,7 +150,7 @@ export default function EmploisDuTemps({
             week_start: weekStart,
             jour: day,
             matiere_id: String(emploi.matiere_id ?? ''),
-            enseignant_id: String(emploi.enseignant_id ?? ''),
+            enseignant_id: String(emploi.enseignant_id ?? subject?.enseignant_id ?? ''),
             description: emploi.description ?? '',
             heure_debut: normalizeTime(emploi.heure_debut),
             heure_fin: normalizeTime(emploi.heure_fin),
@@ -193,6 +194,15 @@ export default function EmploisDuTemps({
 
         const date = dateForDay(form.data.week_start, form.data.jour);
         const room = form.data.salle.trim();
+        const subject = matieres.find((item) => String(item.id) === String(form.data.matiere_id));
+        const effectiveTeacherId = form.data.enseignant_id || subject?.enseignant_id;
+        const willBePublished = form.data.publier || editing?.statut === 'publie';
+
+        if (willBePublished && !effectiveTeacherId) {
+            form.setError('enseignant_id', t('Une séance publiée doit avoir un enseignant, directement ou via sa matière.', locale));
+            return false;
+        }
+
         const candidates = conflits.filter((existing) => {
             if (Number(existing.id) === Number(editing?.id)) {
                 return false;
@@ -201,6 +211,22 @@ export default function EmploisDuTemps({
             return String(existing.date_cours).slice(0, 10) === date
                 && overlaps(start, end, existing.heure_debut, existing.heure_fin);
         });
+        const isSharedCourse = (existing) => {
+                const existingSubject = existing.matiere?.nom ?? existing.titre;
+
+                return Boolean(subject)
+                    && Boolean(effectiveTeacherId)
+                    && String(existing.enseignant_id ?? existing.matiere?.enseignant_id ?? '') === String(effectiveTeacherId)
+                    && existingSubject === subject.nom
+                    && normalizeTime(existing.heure_debut) === form.data.heure_debut
+                    && normalizeTime(existing.heure_fin) === form.data.heure_fin
+                    && room !== ''
+                    && String(existing.salle ?? '').trim() === room
+                    && (
+                        String(existing.filiere_id) !== String(form.data.filiere_id)
+                        || String(existing.niveau_id) !== String(form.data.niveau_id)
+                    );
+        };
 
         const classConflict = candidates.some((existing) => (
             String(existing.filiere_id) === String(form.data.filiere_id)
@@ -211,19 +237,26 @@ export default function EmploisDuTemps({
             return false;
         }
 
-        const teacherConflict = form.data.enseignant_id && candidates.some((existing) => (
-            String(existing.enseignant_id ?? '') === String(form.data.enseignant_id)
+        const teacherConflict = effectiveTeacherId && candidates.find((existing) => (
+            String(existing.enseignant_id ?? existing.matiere?.enseignant_id ?? '') === String(effectiveTeacherId)
+                && !isSharedCourse(existing)
         ));
         if (teacherConflict) {
-            form.setError('enseignant_id', t('Cet enseignant a déjà une séance qui chevauche cet horaire.', locale));
+            const classLabel = [teacherConflict.filiere?.nom, teacherConflict.niveau?.nom].filter(Boolean).join(' · ');
+            const details = [
+                teacherConflict.titre ?? teacherConflict.matiere?.nom,
+                `${normalizeTime(teacherConflict.heure_debut)}–${normalizeTime(teacherConflict.heure_fin)}`,
+                classLabel,
+            ].filter(Boolean).join(' — ');
+            form.setError('enseignant_id', `${t('Cet enseignant a déjà une séance en conflit : ', locale)}${details}.`);
             return false;
         }
 
-        const roomConflict = room && candidates.some((existing) => (
-            String(existing.salle ?? '') === room
+        const roomConflict = room && candidates.find((existing) => (
+            String(existing.salle ?? '').trim() === room && !isSharedCourse(existing)
         ));
         if (roomConflict) {
-            form.setError('salle', t('Cette salle est déjà occupée pendant cet horaire.', locale));
+            form.setError('salle', `${t('Cette salle est déjà occupée par la séance ', locale)}${roomConflict.titre ?? roomConflict.matiere?.nom} (${normalizeTime(roomConflict.heure_debut)}–${normalizeTime(roomConflict.heure_fin)}).`);
             return false;
         }
 
@@ -488,7 +521,13 @@ export default function EmploisDuTemps({
                                     onChange={(event) => setSubject(event.target.value)}
                                     className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
                                 >
-                                    <option value="">{t('Veuillez choisir une matière.', locale)}</option>
+                                    <option value="">
+                                        {matieres.length > 0
+                                            ? t('Veuillez choisir une matière.', locale)
+                                            : hasClass
+                                                ? t('Aucune matière pour cette filière et ce niveau.', locale)
+                                                : t('Sélectionnez une filière et un niveau avant de choisir une matière.', locale)}
+                                    </option>
                                     {matieres.map((matiere) => <option key={matiere.id} value={matiere.id}>{matiere.nom}</option>)}
                                 </select>
                             </label>

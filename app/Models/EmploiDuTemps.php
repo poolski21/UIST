@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -17,6 +18,11 @@ class EmploiDuTemps extends Model
     protected function casts(): array
     {
         return ['date_cours' => 'date', 'publie_le' => 'datetime'];
+    }
+
+    public function scopePublished(Builder $query): Builder
+    {
+        return $query->where('statut', 'publie');
     }
 
     public function filiere(): BelongsTo

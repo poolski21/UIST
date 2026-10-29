@@ -21,15 +21,15 @@
         <strong>Matricule :</strong> {{ $resultat->etudiant->matricule }}<br>
         <strong>Filière :</strong> {{ $resultat->etudiant->filiere?->nom ?? '—' }}<br>
         <strong>Niveau :</strong> {{ $resultat->etudiant->niveau?->nom ?? '—' }}<br>
-        <strong>Année académique :</strong> {{ $resultat->anneeAcademique->libelle }}
+        <strong>Année académique :</strong> {{ $resultat->anneeAcademique->libelle }}<br>
+        <strong>Date d’édition :</strong> {{ $dateEdition->format('d/m/Y') }}
     </div>
     <table>
-        <thead><tr><th>Matière</th><th>Crédits</th><th>Coefficient</th><th>Note / 20</th><th>Résultat</th></tr></thead>
+        <thead><tr><th>Matière</th><th>Coefficient</th><th>Moyenne matière / 20</th><th>Statut</th></tr></thead>
         <tbody>
             @foreach ($notes as $note)
                 <tr>
                     <td>{{ $note->matiere->nom }}</td>
-                    <td>{{ $note->matiere->credits }}</td>
                     <td>{{ number_format($note->matiere->coefficient, 2, ',', ' ') }}</td>
                     <td>{{ number_format($note->note, 2, ',', ' ') }}</td>
                     <td>{{ $note->note >= 10 ? 'Validée' : 'Non validée' }}</td>

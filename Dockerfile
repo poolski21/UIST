@@ -2,8 +2,8 @@ FROM node:22-bookworm-slim AS frontend
 
 WORKDIR /var/www/html
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 COPY . .
 RUN npm run build
@@ -53,6 +53,7 @@ RUN composer dump-autoload --optimize \
         storage/framework/views \
         storage/logs \
         bootstrap/cache \
+    && php artisan storage:link \
     && chown -R www-data:www-data storage bootstrap/cache
 
 COPY --from=frontend /var/www/html/public/build /var/www/html/public/build

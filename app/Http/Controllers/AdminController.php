@@ -76,11 +76,18 @@ class AdminController extends Controller
         $data = $request->validate([
             'filiere_id' => ['required', 'exists:filieres,id'],
             'niveau_id' => ['required', Rule::exists('niveaux', 'id')->where('filiere_id', $request->input('filiere_id'))],
-            'enseignant_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'teacher')],
+            'enseignant_id' => ['required', Rule::exists('users', 'id')->where('role', 'teacher')],
             'nom' => ['required', 'string', 'max:150'],
             'code' => ['required', 'string', 'max:30', 'unique:matieres,code'],
             'credits' => ['required', 'integer', 'min:1', 'max:60'],
             'coefficient' => ['required', 'numeric', 'gt:0', 'max:99'],
+        ], [
+            'filiere_id.required' => 'Veuillez choisir une filière pour la matière.',
+            'filiere_id.exists' => 'La filière sélectionnée est invalide.',
+            'niveau_id.required' => 'Veuillez choisir un niveau pour la matière.',
+            'niveau_id.exists' => 'Le niveau sélectionné ne correspond pas à la filière.',
+            'enseignant_id.required' => 'Veuillez choisir un enseignant référent pour la matière.',
+            'enseignant_id.exists' => 'L’enseignant référent sélectionné est invalide.',
         ]);
         Matiere::create($data);
 

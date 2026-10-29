@@ -22,6 +22,19 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->isProduction()) {
+            if (User::query()->exists()) {
+                $this->command?->info('La table users contient déjà des comptes ; le compte admin initial ne sera pas créé.');
+
+                return;
+            }
+
+            $password = config('uist2its.admin_initial_password');
+            if (! is_string($password) || trim($password) === '') {
+                throw new RuntimeException('ADMIN_INITIAL_PASSWORD doit être défini pour créer le compte admin initial en production.');
+            }
+        }
+
         $admin = $this->ensureInitialAdmin();
 
         if (app()->isProduction()) {
@@ -204,8 +217,7 @@ class DatabaseSeeder extends Seeder
         $admin->forceFill(['password_change_required' => true])->save();
 
         if ($generatedPassword) {
-            $this->command?->warn('Mot de passe initial admin (à conserver de façon sûre, affiché une seule fois) :');
-            $this->command?->line($password);
+            $this->command?->warn('Un mot de passe admin aléatoire a été généré, mais il ne sera pas affiché. Définissez ADMIN_INITIAL_PASSWORD pour choisir un accès connu.');
         } else {
             $this->command?->info('Compte admin initial créé ; le changement du mot de passe sera requis à la première connexion.');
         }

@@ -63,10 +63,10 @@ class WeeklyScheduleTest extends TestCase
         ]);
 
         $this->actingAs($student)
-            ->get('/etudiant?week_start=2026-10-26')
+            ->get(route('etudiant.emplois', ['week_start' => '2026-10-26']))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Student/Dashboard')
+                ->component('Student/Emplois')
                 ->where('weekStart', '2026-10-26')
                 ->has('emploiDuTemps', 2)
                 ->where('emploiDuTemps.0.id', $course->id)

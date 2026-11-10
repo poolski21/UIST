@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AnneeAcademique;
+use App\Models\Annonce;
 use App\Models\EmploiDuTemps;
 use App\Models\Filiere;
 use App\Models\Inscription;
@@ -32,6 +33,7 @@ class UistPortalTest extends TestCase
             'role' => 'student',
             'matricule' => 'UIST-TEST-0001',
             'date_naissance' => '2003-02-14',
+            'password' => null,
         ]);
 
         $response = $this->post('/connexion/etudiant', [
@@ -72,6 +74,7 @@ class UistPortalTest extends TestCase
             'role' => 'student',
             'matricule' => 'UIST-SPACE-0001',
             'date_naissance' => '2002-03-15',
+            'password' => null,
         ]);
 
         $this->get('/espace')->assertRedirect(route('login'));
@@ -141,34 +144,35 @@ class UistPortalTest extends TestCase
         $this->assertDatabaseCount('connexions_log', 6);
     }
 
-    public function test_student_login_uses_the_same_error_for_wrong_matricule_and_birth_date(): void
+    public function test_student_login_uses_the_same_error_for_wrong_matricule_and_date_of_birth(): void
     {
         $student = User::create([
             'name' => 'Étudiant Sécurisé',
             'role' => 'student',
             'matricule' => 'UIST-SECURE-0001',
             'date_naissance' => '2001-04-12',
+            'password' => 'MotDePasseEtudiant!',
         ]);
 
-        $wrongDate = $this->from('/connexion')->post('/connexion/etudiant', [
+        $wrongDateOfBirth = $this->from('/connexion')->post('/connexion/etudiant', [
             'matricule' => $student->matricule,
             'date_naissance' => '2001-04-13',
         ]);
-        $wrongDate->assertSessionHasErrors(['matricule', 'date_naissance']);
-        $dateErrors = session('errors')->get('matricule');
+        $wrongDateOfBirth->assertSessionHasErrors('matricule');
+        $passwordErrors = session('errors')->get('matricule');
 
         $wrongMatricule = $this->from('/connexion')->post('/connexion/etudiant', [
             'matricule' => 'UIST-UNKNOWN',
             'date_naissance' => '2001-04-12',
         ]);
-        $wrongMatricule->assertSessionHasErrors(['matricule', 'date_naissance']);
+        $wrongMatricule->assertSessionHasErrors('matricule');
         $matriculeErrors = session('errors')->get('matricule');
 
-        $this->assertSame($dateErrors, $matriculeErrors);
+        $this->assertSame($passwordErrors, $matriculeErrors);
         $this->assertGuest();
     }
 
-    public function test_student_dashboard_shows_only_schedule_for_exact_filiere_and_level(): void
+    public function test_student_schedule_page_shows_only_courses_for_exact_filiere_and_level(): void
     {
         $filiere = Filiere::create(['nom' => 'Informatique', 'code' => 'INFO']);
         $otherFiliere = Filiere::create(['nom' => 'Gestion', 'code' => 'GEST']);
@@ -220,9 +224,10 @@ class UistPortalTest extends TestCase
             'publie_le' => now(),
         ]);
 
-        $this->actingAs($student)->get('/etudiant')
+        $this->actingAs($student)->get(route('etudiant.emplois'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
+                ->component('Student/Emplois')
                 ->has('emploiDuTemps', 1)
                 ->where('emploiDuTemps.0.id', $matching->id)
                 ->where('emploiDuTemps.0.titre', 'Cours correspondant'));
@@ -232,9 +237,73 @@ class UistPortalTest extends TestCase
             'role' => 'student',
             'matricule' => 'ETU-SCHEDULE-2',
         ]);
-        $this->actingAs($unclassifiedStudent)->get('/etudiant')
+        $this->actingAs($unclassifiedStudent)->get(route('etudiant.emplois'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('emploiDuTemps', 0));
+    }
+
+    public function test_student_sections_require_authentication_and_student_role(): void
+    {
+        $routes = [
+            'etudiant.supports',
+            'etudiant.emplois',
+            'etudiant.infos',
+        ];
+
+        foreach ($routes as $route) {
+            $this->get(route($route))->assertRedirect(route('login'));
+        }
+
+        $teacher = User::create([
+            'name' => 'Enseignant',
+            'email' => 'student-sections-teacher@test.ci',
+            'password' => 'MotDePasseSolide!',
+            'role' => 'teacher',
+        ]);
+
+        foreach ($routes as $route) {
+            $this->actingAs($teacher)->get(route($route))->assertForbidden();
+        }
+    }
+
+    public function test_student_information_feed_is_paginated_by_twelve(): void
+    {
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'student-info-admin@test.ci',
+            'password' => 'MotDePasseSolide!',
+            'role' => 'admin',
+        ]);
+        $student = User::create([
+            'name' => 'Étudiant',
+            'role' => 'student',
+            'matricule' => 'ETU-INFO-PAGINATION',
+        ]);
+
+        foreach (range(1, 13) as $number) {
+            Annonce::create([
+                'titre' => 'Information '.$number,
+                'contenu' => 'Contenu '.$number,
+                'cible_type' => 'tous',
+                'cree_par' => $admin->id,
+                'publiee_le' => now()->addSeconds($number),
+            ]);
+        }
+
+        $this->actingAs($student)
+            ->get(route('etudiant.infos'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('annonces.data', 12)
+                ->where('annonces.per_page', 12)
+                ->where('annonces.total', 13));
+
+        $this->actingAs($student)
+            ->get(route('etudiant.infos', ['infos_page' => 2]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('annonces.data', 1)
+                ->where('annonces.current_page', 2));
     }
 
     public function test_role_permissions_and_student_notes_are_scoped(): void
@@ -250,12 +319,12 @@ class UistPortalTest extends TestCase
         Note::create(['etudiant_id' => $student->id, 'matiere_id' => $subject->id, 'annee_academique_id' => $year->id, 'note' => 15, 'statut' => 'publie']);
         Note::create(['etudiant_id' => $otherStudent->id, 'matiere_id' => $subject->id, 'annee_academique_id' => $year->id, 'note' => 18, 'statut' => 'publie']);
 
-        $this->actingAs($student)->get('/etudiant')
+        $this->actingAs($student)->get(route('etudiant.infos'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Student/Dashboard')
-                ->has('notes', 1)
-                ->where('notes.0.note', 15));
+                ->component('Student/Infos')
+                ->has('notes.data', 1)
+                ->where('notes.data.0.note', 15));
         $this->actingAs($student)->get('/admin')->assertForbidden();
         $this->actingAs($teacher)->get('/admin')->assertForbidden();
 
@@ -310,14 +379,14 @@ class UistPortalTest extends TestCase
         $admin = User::create(['name' => 'Admin', 'email' => 'admin-grades@test.ci', 'password' => 'password-password', 'role' => 'admin']);
         $this->actingAs($admin)->post('/admin/notes/'.$subject->id.'/'.$year->id.'/publier')->assertRedirect();
 
-        $this->actingAs($student)->get('/etudiant')
+        $this->actingAs($student)->get(route('etudiant.infos'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->has('notes', 1)
-                ->where('notes.0.note', 10.13)
-                ->where('notes.0.notes_td', [10, 14, 16])
-                ->where('notes.0.note_examen', 8)
-                ->where('notes.0.validee', true));
+                ->has('notes.data', 1)
+                ->where('notes.data.0.note', 10.13)
+                ->where('notes.data.0.notes_td', [10, 14, 16])
+                ->where('notes.data.0.note_examen', 8)
+                ->where('notes.data.0.validee', true));
     }
 
     public function test_annual_decision_uses_weighted_average_and_required_credits(): void

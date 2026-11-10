@@ -21,8 +21,8 @@ export default function Passwords({ admins = [], generatedPassword = null, mustC
         });
     };
 
-    return <PortalLayout title="Mots de passe administrateurs">
-        <h1 className="mb-6 text-2xl font-bold leading-tight text-slate-900 sm:text-3xl">{t('Mots de passe administrateurs', locale)}</h1>
+    return <PortalLayout title="Mots de passe des comptes">
+        <h1 className="mb-6 text-2xl font-bold leading-tight text-slate-900 sm:text-3xl">{t('Mots de passe des comptes', locale)}</h1>
         {generatedPassword && <section className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950 shadow-sm">
             <h2 className="font-bold">{t('Mot de passe temporaire — affiché une seule fois', locale)}</h2>
             <p className="my-2 text-sm">{t('Transmettez-le par un canal sûr. Le compte devra le remplacer avant toute autre action.', locale)}</p>
@@ -35,7 +35,7 @@ export default function Passwords({ admins = [], generatedPassword = null, mustC
             <form onSubmit={changePassword} className="space-y-4 rounded-xl bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-[#692333]">{t('Changer mon mot de passe', locale)}</h2>
                 <label className="block text-sm font-medium">{t('Mot de passe actuel', locale)}<input type="password" autoComplete="current-password" required value={password.data.current_password} onChange={(event) => password.setData('current_password', event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
-                <label className="block text-sm font-medium">{t('Nouveau mot de passe (16 caractères minimum)', locale)}<input type="password" autoComplete="new-password" required value={password.data.password} onChange={(event) => password.setData('password', event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+                <label className="block text-sm font-medium">{t('Nouveau mot de passe (16 caractères minimum, majuscules, minuscules, chiffre et symbole)', locale)}<input type="password" autoComplete="new-password" required value={password.data.password} onChange={(event) => password.setData('password', event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
                 <label className="block text-sm font-medium">{t('Confirmer le nouveau mot de passe', locale)}<input type="password" autoComplete="new-password" required value={password.data.password_confirmation} onChange={(event) => password.setData('password_confirmation', event.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
                 {Object.values(password.errors).map((error) => <p key={error} className="text-sm text-red-600">{error}</p>)}
                 <button disabled={password.processing} className="rounded-lg bg-[#1a93e8] px-5 py-2.5 font-semibold text-white disabled:opacity-60">{t('Enregistrer', locale)}</button>

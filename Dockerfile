@@ -31,6 +31,8 @@ RUN apt-get update \
         zip \
     && rm -rf /var/lib/apt/lists/*
 
+RUN printf 'upload_max_filesize=300M\npost_max_size=320M\nmax_input_time=300\nmax_execution_time=300\n' > /usr/local/etc/php/conf.d/uploads.ini
+
 RUN a2enmod rewrite headers
 
 WORKDIR /var/www/html
@@ -47,6 +49,7 @@ RUN composer dump-autoload --optimize \
     && php artisan package:discover --ansi \
     && rm -rf public/build \
     && mkdir -p \
+        storage/app/private \
         storage/app/public \
         storage/framework/cache/data \
         storage/framework/sessions \

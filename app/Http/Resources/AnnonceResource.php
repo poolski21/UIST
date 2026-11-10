@@ -13,7 +13,7 @@ class AnnonceResource extends JsonResource
             'id' => $this->id,
             'titre' => $this->titre,
             'contenu' => $this->contenu,
-            'piece_jointe' => $this->piece_jointe ? asset('storage/'.$this->piece_jointe) : null,
+            'piece_jointe' => $this->piece_jointe ? route('annonces.attachment', $this->resource) : null,
             'publiee_le' => $this->publiee_le?->toIso8601String(),
             'cible_type' => $this->cible_type,
         ];

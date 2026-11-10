@@ -52,7 +52,7 @@ Vérifier la base ciblée avant l’exécution ; le trait `RefreshDatabase` réi
 3. Renseigner les variables marquées `sync: false` dans Render : `APP_KEY`, `APP_URL` (URL HTTPS du Web Service), et `ADMIN_INITIAL_PASSWORD` (au moins 16 caractères). Les paramètres SMTP sont requis si les courriels sont souhaités. `DB_URL` est reliée automatiquement à la base du Blueprint.
 4. Générer une clé avec `php artisan key:generate --show` dans un environnement de confiance, puis l’enregistrer comme `APP_KEY` dans Render. Ne pas placer cette valeur dans Git.
 5. Au démarrage, le conteneur exécute `php artisan migrate --force`, puis le seeder initial, les caches de configuration/routes/vues et Apache. Le premier compte admin est créé uniquement si `users` est vide et si `ADMIN_INITIAL_PASSWORD` est défini. Dans les autres cas, aucun compte n’est créé ; un mot de passe absent sur une base vide fait échouer le démarrage sans afficher de secret. Les comptes existants ne sont pas modifiés.
-6. Vérifier le service via `https://<nom-du-service>.onrender.com/up`. Les pièces jointes et images publiques sont conservées sur le disque Render du Blueprint ; ce disque convient à une instance unique, et un stockage objet sera préférable pour un déploiement multi-instance. Prévoir également un worker séparé si le pilote de queue est ensuite changé en `database`.
+6. Vérifier le service via `https://<nom-du-service>.onrender.com/up`. Les pièces jointes et images publiques, ainsi que les supports de cours privés, sont conservés sur le disque Render du Blueprint ; ce disque convient à une instance unique, et un stockage objet sera préférable pour un déploiement multi-instance. Prévoir également un worker séparé si le pilote de queue est ensuite changé en `database`.
 
 Avant chaque migration risquée, sauvegarder la base PostgreSQL. Exemple de sauvegarde depuis un environnement autorisé possédant `pg_dump` :
 
@@ -64,7 +64,7 @@ Conserver les sauvegardes en dehors du conteneur et tester périodiquement leur 
 
 ## Comptes de démonstration
 
-Les enseignants `enseignant1@uist.ci` / `EnseignantUIST!1` et `enseignant2@uist.ci` / `EnseignantUIST!2`, ainsi que les étudiants `UIST-2026-0001` à `UIST-2026-0010`, sont exclusivement des données de développement. Le `DatabaseSeeder` refuse de créer ces comptes/données lorsque `APP_ENV=production`.
+Les enseignants `enseignant1@uist.ci` / `EnseignantUIST!1` et `enseignant2@uist.ci` / `EnseignantUIST!2`, ainsi que les étudiants `UIST-2026-0001` à `UIST-2026-0010`, sont exclusivement des données de développement. Les étudiants de démonstration se connectent avec leur matricule et la date de naissance inscrite par le seeder. Le `DatabaseSeeder` refuse de créer ces comptes/données lorsque `APP_ENV=production`.
 
 ## Rotation du mot de passe administrateur
 
@@ -81,11 +81,15 @@ Pour créer le premier compte administrateur en production, `ADMIN_INITIAL_PASSW
 
 ## Connexion et sécurité
 
-Les étudiants s’authentifient avec leur matricule permanent et leur date de naissance, obligatoire. Les tentatives sont limitées par adresse IP et matricule ; un matricule ou une date de naissance incorrects produisent le même message d’erreur et chaque succès ou échec est conservé dans `connexions_log`.
+Les étudiants s’authentifient avec leur matricule permanent et leur date de naissance. La date doit être renseignée dans le dossier étudiant et l’administration peut la corriger dans les données du compte. Les tentatives sont limitées par adresse IP et matricule ; un matricule ou une date incorrects produisent le même message d’erreur et chaque succès ou échec est conservé dans `connexions_log`.
 
-Les enseignants utilisent leur adresse e-mail et leur mot de passe. Les policies Laravel et le middleware `role` cloisonnent l’administration, la saisie des matières attribuées, les notes personnelles et les décisions publiées. Les pièces jointes sont stockées sur le disque public ; l’image Docker crée le lien `public/storage` lors du build (en local, lancer `php artisan storage:link`).
+Les étudiants se connectent uniquement avec leur matricule permanent et leur date de naissance ; aucun mot de passe étudiant n’est requis. La date de naissance est obligatoire lors de la création d’un compte étudiant. Les enseignants utilisent leur adresse e-mail et leur mot de passe. Les policies Laravel et le middleware `role` cloisonnent l’administration, la saisie des matières attribuées, les notes personnelles et les décisions publiées. Les pièces jointes d’annonces sont stockées hors de l’espace public et téléchargées par une route qui vérifie le rôle et la cible de l’annonce. Le disque Render est monté sur `storage/app`; au démarrage, `storage:migrate-public-uploads` déplace les anciens fichiers d’annonces vers l’espace privé tout en conservant les fichiers de cours publics. L’image Docker crée le lien `public/storage` lors du build (en local, lancer `php artisan storage:link`).
 
-Un étudiant ne reçoit que les emplois du temps qui correspondent exactement à sa filière et à son niveau. Les listes de classe sont réservées à l’administration et établies à partir des inscriptions de l’année universitaire sélectionnée ; l’année active est sélectionnée par défaut.
+Après le mot de passe, les administrateurs doivent aussi saisir le code défini par `ADMIN_MFA_PASSPHRASE` (configurer initialement `lionne` si c’est le choix voulu) ; cette valeur doit être renseignée dans `.env` en local ou comme variable secrète sur Render. Ce code fixe partagé n’est pas une véritable MFA et offre une protection limitée ; ne le réutilisez pas comme mot de passe personnel et remplacez-le par un vrai facteur TOTP dès que possible.
+
+Un étudiant ne reçoit que les emplois du temps et les supports de cours qui correspondent exactement à sa filière et à son niveau. Les professeurs peuvent envoyer un fichier PDF ou Word (300 Mo maximum) à une ou plusieurs classes ; les supports sont disponibles immédiatement dans l’espace des étudiants ciblés et les fichiers sont servis depuis le stockage privé après vérification de l’accès. Les classes destinataires sont choisies parmi les niveaux de toutes les filières, sans restriction aux matières affectées au professeur. Les listes de classe sont réservées à l’administration et établies à partir des inscriptions de l’année universitaire sélectionnée ; l’année active est sélectionnée par défaut.
+
+L’espace étudiant est réparti entre le tableau de bord (`/etudiant`), les supports de cours (`/etudiant/supports`), l’emploi du temps hebdomadaire (`/etudiant/emplois-du-temps`) et le fil d’informations, qui conserve aussi les notes, résultats et notifications publiés (`/etudiant/infos`). Les listes d’informations, de notes, de résultats et de supports sont paginées par 12 éléments.
 
 ## Règle annuelle
 

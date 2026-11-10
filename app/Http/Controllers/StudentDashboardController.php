@@ -2,86 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\AnnonceResource;
-use App\Http\Resources\EmploiDuTempsResource;
-use App\Http\Resources\NoteResource;
-use App\Models\Annonce;
-use App\Models\EmploiDuTemps;
-use App\Models\Matiere;
-use App\Models\ResultatAnnuel;
-use Carbon\Carbon;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class StudentDashboardController extends Controller
 {
-    public function __invoke(Request $request): Response
+    public function __invoke(): Response
     {
-        $student = $request->user();
-        $filters = $request->validate([
-            'week_start' => ['nullable', 'date_format:Y-m-d'],
-        ]);
-        $weekStart = Carbon::parse($filters['week_start'] ?? now())
-            ->startOfWeek(Carbon::MONDAY)
-            ->startOfDay();
-        $weekEnd = $weekStart->copy()->addDays(5);
-
-        $annonces = Annonce::query()
-            ->whereNotNull('publiee_le')
-            ->where(fn ($query) => $query
-                ->where('cible_type', 'tous')
-                ->orWhere(fn ($q) => $q->where('cible_type', 'filiere')->where('cible_id', $student->filiere_id))
-                ->orWhere(fn ($q) => $q->where('cible_type', 'niveau')->where('cible_id', $student->niveau_id)))
-            ->latest('publiee_le')
-            ->get();
-
-        $schedule = EmploiDuTemps::query()
-            ->with(['filiere', 'niveau', 'matiere.enseignant', 'enseignant'])
-            ->published()
-            ->whereDate('date_cours', '>=', $weekStart->toDateString())
-            ->whereDate('date_cours', '<=', $weekEnd->toDateString())
-            ->whereNotNull('filiere_id')
-            ->whereNotNull('niveau_id')
-            ->where('filiere_id', $student->filiere_id)
-            ->where('niveau_id', $student->niveau_id)
-            ->orderBy('date_cours')
-            ->orderBy('heure_debut')
-            ->get();
-        $colorIndexes = Matiere::colorIndexesById();
-        $schedule->each(fn (EmploiDuTemps $course) => $course->setAttribute(
-            'subject_color_index',
-            $colorIndexes[$course->matiere_id] ?? null,
-        ));
-
-        $notes = $student->notes()
-            ->with(['matiere', 'anneeAcademique'])
-            ->where('statut', 'publie')
-            ->latest('publie_le')
-            ->get();
-        $results = ResultatAnnuel::query()
-            ->with('anneeAcademique')
-            ->where('etudiant_id', $student->id)
-            ->whereNotNull('publie_le')
-            ->latest('publie_le')
-            ->get();
-
-        return Inertia::render('Student/Dashboard', [
-            'annonces' => AnnonceResource::collection($annonces)->resolve(),
-            'emploiDuTemps' => EmploiDuTempsResource::collection($schedule)->resolve(),
-            'notes' => NoteResource::collection($notes)->resolve(),
-            'resultats' => $results->map(fn ($resultat) => [
-                'id' => $resultat->id,
-                'annee' => $resultat->anneeAcademique->libelle,
-                'moyenne' => (float) $resultat->moyenne_generale,
-                'credits' => $resultat->credits_obtenus,
-                'decision' => $resultat->decision_finale,
-                'pdf' => route('releve.pdf', $resultat),
-            ]),
-            'notificationCount' => $student->unreadNotifications()->count(),
-            'notifications' => $student->notifications()->latest()->take(10)->get(['id', 'data', 'read_at', 'created_at']),
-            'week' => [$weekStart->format('d/m/Y'), $weekEnd->format('d/m/Y')],
-            'weekStart' => $weekStart->toDateString(),
-        ]);
+        return Inertia::render('Student/Dashboard');
     }
 }

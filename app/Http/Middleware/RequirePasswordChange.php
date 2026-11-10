@@ -6,8 +6,13 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class RequireAdminPasswordChange
+class RequirePasswordChange
 {
+    /**
+     * Handle an incoming request.
+     *
+     * @param  Closure(Request): (Response)  $next
+     */
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -24,9 +29,10 @@ class RequireAdminPasswordChange
             && $user->password_change_required
             && ! in_array($request->route()?->getName(), $allowedRoutes, true)
         ) {
-            return $user->role === 'admin'
-                ? redirect()->route('admin.passwords.index')
-                : redirect()->route('password.change');
+            return match ($user->role) {
+                'admin' => redirect()->route('admin.passwords.index'),
+                'teacher' => redirect()->route('password.change'),
+            };
         }
 
         return $next($request);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Niveau extends Model
 {
@@ -16,5 +17,10 @@ class Niveau extends Model
     public function matieres()
     {
         return $this->hasMany(Matiere::class);
+    }
+
+    public function supportsCours(): BelongsToMany
+    {
+        return $this->belongsToMany(SupportCours::class, 'support_cours_niveaux');
     }
 }

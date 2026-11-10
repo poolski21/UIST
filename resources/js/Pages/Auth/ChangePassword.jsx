@@ -45,7 +45,7 @@ export default function ChangePassword() {
                     )}
 
                     <label className="block text-sm font-medium text-slate-700">
-                        {t('Nouveau mot de passe (16 caractères minimum)', locale)}
+                        {t('Nouveau mot de passe (16 caractères minimum, majuscules, minuscules, chiffre et symbole)', locale)}
                         <input
                             type="password"
                             autoComplete="new-password"

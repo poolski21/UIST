@@ -1,6 +1,7 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import {
     Award,
+    BookOpen,
     CalendarDays,
     ClipboardList,
     GraduationCap,
@@ -36,9 +37,15 @@ export default function PortalLayout({ title, children }) {
         : user?.role === 'teacher'
             ? [
                 ['/enseignant/mon-programme', 'Mon programme', CalendarDays],
+                ['/enseignant/supports-cours', 'Supports de cours', BookOpen],
                 ['/enseignant/notes', 'Saisie des notes', NotebookPen],
             ]
-            : [['/etudiant', 'Mon espace', House]];
+            : [
+                ['/etudiant', 'Mon espace', House],
+                ['/etudiant/supports', 'Supports de cours', BookOpen],
+                ['/etudiant/emplois-du-temps', 'Emplois du temps', CalendarDays],
+                ['/etudiant/infos', 'Fil d’informations', Megaphone],
+            ];
 
     return <div className="min-h-screen bg-slate-50">
         <Head title={t(title, locale)} />

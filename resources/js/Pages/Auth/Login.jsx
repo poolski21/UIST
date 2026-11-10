@@ -3,15 +3,28 @@ import { useState } from 'react';
 import LanguageSwitcher from '../../Components/LanguageSwitcher';
 import { translate as t } from '../../i18n';
 
-export default function Login({ studentSecondFactor = false }) {
-    const { locale = 'fr' } = usePage().props;
-    const [mode, setMode] = useState('student');
+export default function Login() {
+    const { locale = 'fr', adminMfaRequired = false } = usePage().props;
+    const [mode, setMode] = useState(adminMfaRequired ? 'staff' : 'student');
     const student = useForm({ matricule: '', date_naissance: '' });
     const staff = useForm({ email: '', password: '' });
-    const form = mode === 'student' ? student : staff;
+    const adminMfa = useForm({ admin_passphrase: '' });
+    const form = adminMfaRequired ? adminMfa : mode === 'student' ? student : staff;
     const submit = (event) => {
         event.preventDefault();
-        form.post(mode === 'student' ? '/connexion/etudiant' : '/connexion/personnel');
+        if (adminMfaRequired) {
+            adminMfa.post('/connexion/personnel/verification');
+            return;
+        }
+
+        form.post(mode === 'student' ? '/connexion/etudiant' : '/connexion/personnel', {
+            onSuccess: (page) => {
+                if (page.props.adminMfaRequired) {
+                    staff.reset('password');
+                    adminMfa.reset();
+                }
+            },
+        });
     };
 
     return <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-50 via-white to-blue-100 px-4 py-10">
@@ -23,19 +36,26 @@ export default function Login({ studentSecondFactor = false }) {
             </div>
             <h1 className="mb-2 text-2xl font-bold text-slate-900">{t('Connexion à votre espace', locale)}</h1>
             <p className="mb-6 text-sm text-slate-500">{t('Choisissez votre profil pour continuer.', locale)}</p>
-            <div className="mb-6 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
+            {!adminMfaRequired && <div className="mb-6 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
                 <button onClick={() => setMode('student')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'student' ? 'bg-white text-[#1a93e8] shadow-sm' : 'text-slate-500'}`}>{t('Étudiant', locale)}</button>
                 <button onClick={() => setMode('staff')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'staff' ? 'bg-white text-[#1a93e8] shadow-sm' : 'text-slate-500'}`}>{t('Enseignant / Admin', locale)}</button>
-            </div>
+            </div>}
+            {adminMfaRequired && <p className="mb-6 text-sm text-slate-600">{t('Identifiants corrects. Confirmez votre connexion administrateur.', locale)}</p>}
             <form onSubmit={submit} className="space-y-4">
-                {mode === 'student' ? <>
+                {adminMfaRequired ? <>
+                    <label className="block text-sm font-medium text-slate-700">{t('Nom de l’animal', locale)}
+                        <input type="password" autoComplete="off" value={adminMfa.data.admin_passphrase} onChange={(event) => adminMfa.setData('admin_passphrase', event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5" />
+                    </label>
+                    {adminMfa.errors.admin_passphrase && <p className="text-sm text-red-600">{adminMfa.errors.admin_passphrase}</p>}
+                </> : mode === 'student' ? <>
                     <label className="block text-sm font-medium text-slate-700">{t('Matricule permanent', locale)}
                         <input autoComplete="username" value={student.data.matricule} onChange={(event) => student.setData('matricule', event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-[#1a93e8] focus:ring-2 focus:ring-sky-100" placeholder={t('Ex. UIST-2026-0001', locale)} />
                     </label>
-                    {studentSecondFactor && <label className="block text-sm font-medium text-slate-700">{t('Date de naissance', locale)}
-                        <input type="date" value={student.data.date_naissance} onChange={(event) => student.setData('date_naissance', event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5" />
-                    </label>}
+                    <label className="block text-sm font-medium text-slate-700">{t('Date de naissance', locale)}
+                        <input type="date" autoComplete="bday" value={student.data.date_naissance} onChange={(event) => student.setData('date_naissance', event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5" />
+                    </label>
                     {student.errors.matricule && <p className="text-sm text-red-600">{student.errors.matricule}</p>}
+                    {student.errors.date_naissance && <p className="text-sm text-red-600">{student.errors.date_naissance}</p>}
                 </> : <>
                     <label className="block text-sm font-medium text-slate-700">{t('Adresse e-mail', locale)}
                         <input type="email" autoComplete="username" value={staff.data.email} onChange={(event) => staff.setData('email', event.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5" />
@@ -47,7 +67,7 @@ export default function Login({ studentSecondFactor = false }) {
                 </>}
                 <button disabled={form.processing} className="w-full rounded-lg bg-[#1a93e8] py-3 font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60">{form.processing ? t('Connexion…', locale) : t('Se connecter', locale)}</button>
             </form>
-            <p className="mt-6 text-center text-xs leading-5 text-slate-500">{t('Les étudiants se connectent avec leur matricule permanent. Pour toute assistance, contactez l’administration.', locale)}</p>
+            <p className="mt-6 text-center text-xs leading-5 text-slate-500">{t('Les étudiants se connectent avec leur matricule permanent et leur date de naissance. Pour toute assistance, contactez l’administration.', locale)}</p>
             <Link href="/" className="mt-4 block text-center text-sm font-medium text-[#1a93e8]">{t('← Retour à l’accueil', locale)}</Link>
         </div>
     </div>;

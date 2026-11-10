@@ -6,12 +6,14 @@ use App\Models\Annonce;
 use App\Models\Inscription;
 use App\Models\Note;
 use App\Models\ResultatAnnuel;
+use App\Models\SupportCours;
 use App\Models\User;
 use App\Policies\AdminPasswordPolicy;
 use App\Policies\AnnoncePolicy;
 use App\Policies\ClassRosterPolicy;
 use App\Policies\NotePolicy;
 use App\Policies\ResultatAnnuelPolicy;
+use App\Policies\SupportCoursPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -38,6 +40,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Annonce::class, AnnoncePolicy::class);
         Gate::policy(Note::class, NotePolicy::class);
         Gate::policy(ResultatAnnuel::class, ResultatAnnuelPolicy::class);
+        Gate::policy(SupportCours::class, SupportCoursPolicy::class);
         Gate::policy(User::class, AdminPasswordPolicy::class);
         Gate::policy(Inscription::class, ClassRosterPolicy::class);
     }

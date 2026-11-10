@@ -14,7 +14,7 @@ services:
     healthCheckPath: /up
     disk:
       name: uist2its-public-storage
-      mountPath: /var/www/html/storage/app/public
+      mountPath: /var/www/html/storage/app
       sizeGB: 1
     envVars:
       - key: APP_NAME
@@ -58,6 +58,8 @@ services:
       - key: FILESYSTEM_DISK
         value: public
       - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+      - key: ADMIN_MFA_PASSPHRASE
         sync: false
       - key: MAIL_MAILER
         value: smtp

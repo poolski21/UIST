@@ -6,6 +6,9 @@ use App\Http\Controllers\AnnonceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ClassRosterController;
 use App\Http\Controllers\EmploiDuTempsController;
+use App\Http\Controllers\Etudiant\EmploiDuTempsController as StudentEmploiDuTempsController;
+use App\Http\Controllers\Etudiant\InfoController as StudentInfoController;
+use App\Http\Controllers\Etudiant\SupportController as StudentSupportController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\NoteController;
@@ -14,6 +17,7 @@ use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\ResultatAnnuelController;
 use App\Http\Controllers\StudentDashboardController;
 use App\Http\Controllers\TeacherProgramController;
+use App\Http\Controllers\TeacherSupportCoursController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -22,6 +26,9 @@ Route::middleware('guest')->group(function () {
     Route::get('/connexion', [AuthController::class, 'create'])->name('login');
     Route::post('/connexion/etudiant', [AuthController::class, 'student'])->middleware('throttle:20,1')->name('login.student');
     Route::post('/connexion/personnel', [AuthController::class, 'user'])->middleware('throttle:10,1')->name('login.user');
+    Route::post('/connexion/personnel/verification', [AuthController::class, 'verifyAdminMfa'])
+        ->middleware('throttle:10,1')
+        ->name('login.admin-mfa');
 });
 Route::post('/deconnexion', [AuthController::class, 'destroy'])->middleware('auth')->name('logout');
 
@@ -30,6 +37,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/securite/mot-de-passe', [PasswordChangeController::class, 'edit'])->name('password.change');
         Route::put('/securite/mot-de-passe', [PasswordChangeController::class, 'update'])->name('password.change.update');
     });
+    Route::get('/annonces/{annonce}/piece-jointe', [AnnonceController::class, 'attachment'])
+        ->name('annonces.attachment');
+    Route::get('/supports-cours/{supportCours}/telecharger', [TeacherSupportCoursController::class, 'download'])
+        ->name('supports-cours.download');
 
     Route::get('/espace', function () {
         return match (auth()->user()->role) {
@@ -40,8 +51,12 @@ Route::middleware('auth')->group(function () {
         };
     })->name('espace');
 
-    Route::get('/etudiant', StudentDashboardController::class)
-        ->middleware('role:student')->name('etudiant.dashboard');
+    Route::prefix('etudiant')->name('etudiant.')->middleware('role:student')->group(function () {
+        Route::get('/', StudentDashboardController::class)->name('dashboard');
+        Route::get('/supports', [StudentSupportController::class, 'index'])->name('supports');
+        Route::get('/emplois-du-temps', [StudentEmploiDuTempsController::class, 'index'])->name('emplois');
+        Route::get('/infos', [StudentInfoController::class, 'index'])->name('infos');
+    });
     Route::post('/notifications/{notification}/lire', [NotificationController::class, 'read'])
         ->name('notifications.read');
     Route::get('/resultats/{resultat}/releve.pdf', [ResultatAnnuelController::class, 'pdf'])
@@ -49,6 +64,8 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('enseignant')->name('enseignant.')->middleware('role:teacher')->group(function () {
         Route::get('/mon-programme', TeacherProgramController::class)->name('programme');
+        Route::get('/supports-cours', [TeacherSupportCoursController::class, 'index'])->name('supports-cours.index');
+        Route::post('/supports-cours', [TeacherSupportCoursController::class, 'store'])->name('supports-cours.store');
         Route::get('/notes', [NoteController::class, 'index'])->name('notes');
         Route::post('/notes', [NoteController::class, 'store'])->name('notes.store');
     });

@@ -55,7 +55,77 @@ class AuthRedirectTest extends TestCase
         $this->get(route('espace'))->assertRedirect(route('enseignant.notes'));
     }
 
-    public function test_student_with_required_password_change_still_reaches_student_space_and_cannot_access_password_change(): void
+    public function test_admin_must_submit_the_animal_passphrase_before_authentication(): void
+    {
+        config(['uist2its.admin_mfa_passphrase' => 'lionne']);
+        $admin = $this->createUser('admin', false);
+
+        $this->post(route('login.user'), [
+            'email' => $admin->email,
+            'password' => 'CurrentTeacherPassword2026!',
+        ])->assertRedirect(route('login'));
+
+        $this->assertGuest();
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/Login')
+                ->where('adminMfaRequired', true));
+
+        $this->post(route('login.admin-mfa'), [
+            'admin_passphrase' => 'tigre',
+        ])->assertSessionHasErrors('admin_passphrase');
+
+        $this->assertGuest();
+        $this->post(route('login.admin-mfa'), [
+            'admin_passphrase' => 'lionne',
+        ])->assertRedirect(route('espace'));
+
+        $this->assertAuthenticatedAs($admin);
+        $this->assertDatabaseHas('connexions_log', [
+            'user_id' => $admin->id,
+            'type_connexion' => 'admin_mfa',
+            'reussie' => true,
+        ]);
+    }
+
+    public function test_admin_login_fails_with_service_unavailable_when_passphrase_is_not_configured(): void
+    {
+        config(['uist2its.admin_mfa_passphrase' => null]);
+        $admin = $this->createUser('admin', false);
+
+        $this->post(route('login.user'), [
+            'email' => $admin->email,
+            'password' => 'CurrentTeacherPassword2026!',
+        ])->assertServiceUnavailable();
+
+        $this->assertGuest();
+    }
+
+    public function test_admin_passphrase_endpoint_is_rate_limited(): void
+    {
+        config(['uist2its.admin_mfa_passphrase' => 'lionne']);
+        $admin = $this->createUser('admin', false);
+
+        $this->post(route('login.user'), [
+            'email' => $admin->email,
+            'password' => 'CurrentTeacherPassword2026!',
+        ])->assertRedirect(route('login'));
+
+        for ($attempt = 0; $attempt < 9; $attempt++) {
+            $this->post(route('login.admin-mfa'), [
+                'admin_passphrase' => 'incorrect',
+            ])->assertSessionHasErrors('admin_passphrase');
+        }
+
+        $this->post(route('login.admin-mfa'), [
+            'admin_passphrase' => 'incorrect',
+        ])->assertTooManyRequests();
+
+        $this->assertGuest();
+    }
+
+    public function test_student_signs_in_with_matricule_and_date_of_birth_even_when_password_change_is_flagged(): void
     {
         $student = User::create([
             'name' => 'Étudiant de test',
@@ -71,16 +141,11 @@ class AuthRedirectTest extends TestCase
             'date_naissance' => '2002-05-10',
         ])->assertRedirect(route('espace'));
 
-        $this->get(route('espace'))
-            ->assertRedirect(route('etudiant.dashboard'));
-
+        $this->assertAuthenticatedAs($student);
+        $this->get(route('etudiant.dashboard'))->assertOk();
         $this->get(route('password.change'))->assertForbidden();
-        $this->put(route('password.change.update'), [
-            'current_password' => 'CurrentTeacherPassword2026!',
-            'password' => 'NewStudentPassword2026!',
-            'password_confirmation' => 'NewStudentPassword2026!',
-        ])->assertForbidden();
         $this->assertTrue($student->fresh()->password_change_required);
+        $this->get(route('espace'))->assertRedirect(route('etudiant.dashboard'));
     }
 
     public function test_espace_redirects_admin_teacher_and_student_to_their_role_pages(): void

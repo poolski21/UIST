@@ -10,8 +10,10 @@ use App\Models\User;
 use App\Notifications\PublicationNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnnonceController extends Controller
 {
@@ -38,7 +40,7 @@ class AnnonceController extends Controller
             $data['cible_id'] = null;
         }
 
-        $attachment = $request->file('piece_jointe')?->store('annonces', 'public');
+        $attachment = $request->file('piece_jointe')?->store('annonces', 'local');
         $annonce = Annonce::create([
             ...$data,
             'piece_jointe' => $attachment,
@@ -51,6 +53,14 @@ class AnnonceController extends Controller
         }
 
         return back()->with('success', $annonce->publiee_le ? 'Annonce publiée.' : 'Brouillon enregistré.');
+    }
+
+    public function attachment(Annonce $annonce): StreamedResponse
+    {
+        $this->authorize('view', $annonce);
+        abort_unless($annonce->piece_jointe && Storage::disk('local')->exists($annonce->piece_jointe), 404);
+
+        return Storage::disk('local')->download($annonce->piece_jointe);
     }
 
     public function publish(Annonce $annonce): RedirectResponse

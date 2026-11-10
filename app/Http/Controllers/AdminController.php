@@ -100,22 +100,24 @@ class AdminController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'matricule' => ['required', 'string', 'max:80', 'unique:users,matricule'],
             'email' => ['nullable', 'email', 'unique:users,email'],
-            'date_naissance' => ['nullable', 'date'],
+            'date_naissance' => ['required', 'date_format:Y-m-d'],
             'filiere_id' => ['required', 'exists:filieres,id'],
             'niveau_id' => ['required', Rule::exists('niveaux', 'id')->where('filiere_id', $request->input('filiere_id'))],
             'annee_academique_id' => ['required', 'exists:annees_academiques,id'],
         ]);
 
-        $student = User::create([
-            ...$data,
-            'role' => 'student',
-            'password' => null,
-        ]);
-        Inscription::create([
-            'etudiant_id' => $student->id,
-            'niveau_id' => $data['niveau_id'],
-            'annee_academique_id' => $data['annee_academique_id'],
-        ]);
+        DB::transaction(function () use ($data): void {
+            $student = User::create([
+                ...$data,
+                'role' => 'student',
+                'password' => null,
+            ]);
+            Inscription::create([
+                'etudiant_id' => $student->id,
+                'niveau_id' => $data['niveau_id'],
+                'annee_academique_id' => $data['annee_academique_id'],
+            ]);
+        });
 
         return back()->with('success', 'Étudiant créé et inscrit.');
     }

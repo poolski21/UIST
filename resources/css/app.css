@@ -21,3 +21,122 @@ input, select, textarea { max-width: 100%; }
 @media (max-width: 359px) {
     .mobile-safe { padding-left: .75rem; padding-right: .75rem; }
 }
+
+.weekly-schedule--student {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.weekly-schedule--student .weekly-schedule__grid-scroll {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overscroll-behavior-x: contain;
+}
+
+.weekly-schedule__mobile-days,
+.weekly-schedule__mobile-courses {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .weekly-schedule--student .weekly-schedule__grid-scroll {
+        display: none;
+    }
+
+    .weekly-schedule--student .weekly-schedule__mobile-days {
+        display: flex;
+        max-width: 100%;
+        gap: .5rem;
+        overflow-x: auto;
+        padding-bottom: .25rem;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .weekly-schedule--student .weekly-schedule__day-button {
+        display: inline-flex;
+        min-width: 3.75rem;
+        min-height: 44px;
+        flex: 0 0 auto;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #cbd5e1;
+        border-radius: .5rem;
+        background: #fff;
+        padding: .25rem .5rem;
+        color: #334155;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.15;
+    }
+
+    .weekly-schedule--student .weekly-schedule__day-button span {
+        margin-top: .125rem;
+        font-size: 14px;
+        font-weight: 400;
+    }
+
+    .weekly-schedule--student .weekly-schedule__day-button.is-selected {
+        border-color: #1a93e8;
+        background: #e0f2fe;
+        color: #075985;
+    }
+
+    .weekly-schedule--student .weekly-schedule__day-button.is-today {
+        box-shadow: inset 0 0 0 1px #0284c7;
+    }
+
+    .weekly-schedule--student .weekly-schedule__mobile-courses {
+        display: grid;
+        min-width: 0;
+        gap: .75rem;
+    }
+
+    .weekly-schedule--student .weekly-schedule__course-card {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        border: 1px solid #e2e8f0;
+        border-left: 3px solid #1a93e8;
+        border-radius: .625rem;
+        background: #fff;
+        padding: .75rem;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
+        color: #334155;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+
+    .weekly-schedule--student .weekly-schedule__course-card h3 {
+        margin-top: .25rem;
+        overflow-wrap: anywhere;
+        color: #0f172a;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+
+    .weekly-schedule--student .weekly-schedule__course-card p + p {
+        margin-top: .125rem;
+    }
+
+    .weekly-schedule--student .weekly-schedule__course-time {
+        color: #075985;
+        font-weight: 700;
+    }
+
+    .weekly-schedule--student .weekly-schedule__room-missing {
+        color: #64748b;
+        font-style: italic;
+    }
+
+    .weekly-schedule--student .weekly-schedule__empty-day {
+        border-radius: .5rem;
+        background: #f8fafc;
+        padding: 1rem;
+        color: #475569;
+        font-size: 14px;
+    }
+}

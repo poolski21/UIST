@@ -1,7 +1,9 @@
 import { router, usePage } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import { translate as t } from '../i18n';
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const SHORT_DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const FIRST_MINUTE = 8 * 60;
 const LAST_MINUTE = 17 * 60;
 const SLOT_MINUTES = 30;
@@ -62,6 +64,24 @@ function localDateString(date) {
     return dateToString(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12));
 }
 
+function defaultDayIndex(weekStart, courses, today) {
+    const currentWeekDay = DAYS.findIndex((_, index) => (
+        localDateString(dateForDay(weekStart, index)) === today
+    ));
+
+    if (currentWeekDay !== -1) {
+        return currentWeekDay;
+    }
+
+    const firstScheduledDay = DAYS.findIndex((_, index) => {
+        const date = localDateString(dateForDay(weekStart, index));
+
+        return courses.some((course) => course.date === date);
+    });
+
+    return firstScheduledDay === -1 ? 0 : firstScheduledDay;
+}
+
 function layoutDayCourses(courses) {
     const sortedCourses = [...courses].sort((first, second) => (
         timeToMinutes(first.heure_debut) - timeToMinutes(second.heure_debut)
@@ -119,6 +139,7 @@ export default function WeeklyScheduleGrid({ courses = [], weekStart, isTeacher 
     const { locale = 'fr' } = page.props;
     const { url = '/' } = page;
     const today = localDateString(new Date());
+    const [selectedDayIndex, setSelectedDayIndex] = useState(() => defaultDayIndex(weekStart, courses, today));
     const courseStart = courses.length
         ? Math.min(...courses.map((course) => timeToMinutes(course.heure_debut)))
         : FIRST_MINUTE;
@@ -129,6 +150,10 @@ export default function WeeklyScheduleGrid({ courses = [], weekStart, isTeacher 
     const gridEnd = Math.min(LAST_MINUTE, Math.ceil(courseEnd / SLOT_MINUTES) * SLOT_MINUTES);
     const slotCount = Math.max(1, (gridEnd - gridStart) / SLOT_MINUTES);
     const weekEnd = dateForDay(weekStart, 5);
+    const selectedDate = localDateString(dateForDay(weekStart, selectedDayIndex));
+    const selectedDayCourses = courses
+        .filter((course) => course.date === selectedDate)
+        .sort((first, second) => timeToMinutes(first.heure_debut) - timeToMinutes(second.heure_debut));
     const formatDate = (date) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', {
         day: 'numeric',
         month: 'short',
@@ -138,6 +163,10 @@ export default function WeeklyScheduleGrid({ courses = [], weekStart, isTeacher 
         day: '2-digit',
         month: '2-digit',
     }).format(date);
+
+    useEffect(() => {
+        setSelectedDayIndex(defaultDayIndex(weekStart, courses, today));
+    }, [weekStart]);
 
     function navigateToWeek(targetWeek) {
         router.get(url.split('?')[0], { week_start: targetWeek }, {
@@ -172,7 +201,7 @@ export default function WeeklyScheduleGrid({ courses = [], weekStart, isTeacher 
             <article
                 key={course.id}
                 title={course.matiere ?? course.titre}
-                className={`absolute z-10 overflow-hidden rounded-md border-l-[3px] p-1 text-left text-[11px] leading-tight shadow-sm transition-shadow hover:z-20 hover:shadow-md ${subjectColor(course)}`}
+                className={`weekly-schedule__course absolute z-10 overflow-hidden rounded-md border-l-[3px] p-1 text-left text-[11px] leading-tight shadow-sm transition-shadow hover:z-20 hover:shadow-md ${subjectColor(course)}`}
                 style={{
                     top: `${top}%`,
                     left: `calc(${(lane * 100) / laneCount}% + 0.25rem)`,
@@ -192,8 +221,8 @@ export default function WeeklyScheduleGrid({ courses = [], weekStart, isTeacher 
     }
 
     return (
-        <section aria-label={t(isTeacher ? 'Mon programme' : 'Emplois du temps', locale)} className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <section aria-label={t(isTeacher ? 'Mon programme' : 'Emplois du temps', locale)} className={`weekly-schedule ${isTeacher ? '' : 'weekly-schedule--student'} space-y-3`}>
+            <div className="weekly-schedule__controls flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-bold text-slate-800 sm:text-base">
                     {t('Semaine du', locale)} {formatDate(parseDate(weekStart))} {t('au', locale)} {formatDate(weekEnd)}
                 </h2>
@@ -220,9 +249,44 @@ export default function WeeklyScheduleGrid({ courses = [], weekStart, isTeacher 
 
             {!courses.length && <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{t('Aucun cours planifié cette semaine.', locale)}</p>}
 
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            {!isTeacher && <>
+                <div className="weekly-schedule__mobile-days" role="group" aria-label={t('Choisir un jour', locale)}>
+                    {DAYS.map((day, dayIndex) => {
+                        const date = dateForDay(weekStart, dayIndex);
+                        const isToday = localDateString(date) === today;
+                        const isSelected = selectedDayIndex === dayIndex;
+
+                        return <button
+                            key={day}
+                            type="button"
+                            aria-pressed={isSelected}
+                            aria-label={`${t(day, locale)} ${formatDayDate(date)}`}
+                            onClick={() => setSelectedDayIndex(dayIndex)}
+                            className={`weekly-schedule__day-button ${isSelected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}`}
+                        >
+                            {t(SHORT_DAYS[dayIndex], locale)}
+                            <span>{formatDayDate(date)}</span>
+                        </button>;
+                    })}
+                </div>
+
+                <div className="weekly-schedule__mobile-courses" aria-label={t(DAYS[selectedDayIndex], locale)}>
+                    {selectedDayCourses.length
+                        ? selectedDayCourses.map((course) => <article key={course.id} className="weekly-schedule__course-card">
+                            <p className="weekly-schedule__course-time">{formatTime(course.heure_debut)}–{formatTime(course.heure_fin)}</p>
+                            <h3 title={course.matiere ?? course.titre}>{course.matiere ?? course.titre}</h3>
+                            {course.salle
+                                ? <p>{t('Salle', locale)} : {course.salle}</p>
+                                : <p className="weekly-schedule__room-missing" title={t('Salle à confirmer', locale)}>{t('Salle à confirmer', locale)}</p>}
+                            {course.enseignant && <p>{t('Enseignant', locale)} : {course.enseignant}</p>}
+                        </article>)
+                        : <p className="weekly-schedule__empty-day">{t('Aucun cours prévu ce jour.', locale)}</p>}
+                </div>
+            </>}
+
+            <div className="weekly-schedule__grid-scroll overflow-x-auto rounded-lg border border-slate-200">
                 <div
-                    className="grid min-w-[708px] grid-cols-[48px_repeat(6,minmax(110px,1fr))] bg-white md:min-w-0 md:grid-cols-[48px_repeat(6,minmax(0,1fr))]"
+                    className="weekly-schedule__grid grid min-w-[708px] grid-cols-[48px_repeat(6,minmax(110px,1fr))] bg-white md:min-w-0 md:grid-cols-[48px_repeat(6,minmax(0,1fr))]"
                     style={{
                         gridTemplateRows: `40px repeat(${slotCount}, ${SLOT_HEIGHT}px)`,
                     }}
